@@ -1,7 +1,7 @@
 # Wint receipts
 
-A Linux desktop app that turns a PDF of scanned receipts (one receipt per page) into receipts in
-[Wint](https://wint.se):
+A desktop app (Python + Qt) that turns a PDF of scanned receipts (one receipt per page) into
+receipts in [Wint](https://wint.se):
 
 1. **Open a PDF.** Drag it onto the window, or use *Open PDF*. Each page is rendered and sent to the
    [`claude` CLI](https://docs.claude.com/en/docs/claude-code), which reads the receipt and returns
@@ -25,37 +25,94 @@ anything, so a retried upload doesn't create duplicates.
 
 ## Requirements
 
-- Linux (tested on Fedora) with Python 3.12 or newer
-- The `claude` CLI, logged in
-- A Wint API key: in the Wint web app, *Settings → Integrations → custom app*
+- Python 3.12 or newer
+- The [`claude` CLI](https://docs.claude.com/en/docs/claude-code), installed and logged in. Check with
+  `claude --version`.
+- A Wint API key: in the Wint web app, *Settings → Integrations → custom app*. The user name is your
+  company id.
+
+| Platform | Status |
+|---|---|
+| Linux | Tested (Fedora, Wayland) |
+| Windows 10/11 | Should work; not tested yet |
+| macOS (Apple Silicon or Intel) | Should work; not tested yet |
 
 ## Run from source
 
+### Linux and macOS
+
 ```bash
+git clone git@github.com:allco/wint-receipts.git && cd wint-receipts
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/wint-receipts [scans.pdf]
 ```
 
-To prefill the Wint credentials, put them in a `.CREDENTIALS` file (git-ignored) and source it first:
+On macOS, use the `python3` from [python.org](https://www.python.org/downloads/) or Homebrew
+(`brew install python`). Apple's bundled Python may be too old.
+
+### Windows (PowerShell)
+
+```powershell
+git clone git@github.com:allco/wint-receipts.git; cd wint-receipts
+py -3 -m venv .venv
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\wint-receipts [scans.pdf]
+```
+
+Install Python from [python.org](https://www.python.org/downloads/) and tick *Add python.exe to
+PATH*. If the app reports that it can't find the claude CLI, open *Settings → claude command* and enter
+the full path from `where.exe claude`, e.g. `C:\Users\you\AppData\Roaming\npm\claude.cmd`.
+
+### Wint credentials
+
+You can enter the user name and API key in *Settings*: they're stored in the system keyring (Secret
+Service / GNOME Keyring on Linux, Keychain on macOS, Credential Manager on Windows). To prefill them
+instead, set `WINT_USER` and `WINT_TOKEN` before starting the app.
+
+Linux / macOS, using a git-ignored `.CREDENTIALS` file:
 
 ```bash
-cat > .CREDENTIALS <<'EOF'
-export WINT_USER=<company id>
-export WINT_TOKEN=<api key uuid>
-EOF
+printf 'export WINT_USER=%s\nexport WINT_TOKEN=%s\n' '<company id>' '<api key uuid>' > .CREDENTIALS
 . ./.CREDENTIALS && .venv/bin/wint-receipts
+```
+
+Windows:
+
+```powershell
+$env:WINT_USER = "<company id>"; $env:WINT_TOKEN = "<api key uuid>"
+.venv\Scripts\wint-receipts
 ```
 
 ## Single binary
 
+PyInstaller bundles Python, Qt and the app into one executable. It doesn't cross-compile, so build
+on each platform for that platform. The result still needs the `claude` CLI on the machine it runs
+on, and it's a snapshot of the code, so rebuild it after changes.
+
+Linux / macOS:
+
 ```bash
-scripts/build-binary.sh       # → dist/wint-receipts (PyInstaller, one ~96 MB file, Qt included)
+scripts/build-binary.sh        # → dist/wint-receipts (about 96 MB)
 . ./.CREDENTIALS && dist/wint-receipts
 ```
 
-The binary is a snapshot of the code, so rebuild it after changes. It still needs the `claude` CLI on
-the machine it runs on.
+Windows (PowerShell):
+
+```powershell
+.venv\Scripts\pip install pyinstaller
+.venv\Scripts\pyinstaller --noconfirm --clean --onefile --windowed --name wint-receipts `
+  --collect-data pypdfium2_raw --collect-binaries pypdfium2_raw wint_receipts\__main__.py
+dist\wint-receipts.exe
+```
+
+Platform notes:
+
+- **Linux:** a binary built on a new distribution (e.g. Fedora 44) needs an equally new glibc. To run
+  it on older systems, build on the oldest distribution you want to support.
+- **macOS:** the binary isn't signed, so the first time, right-click it → *Open* to get past
+  Gatekeeper. Apple Silicon and Intel need separate builds.
+- **Windows:** SmartScreen may warn about an unknown publisher; choose *More info → Run anyway*.
 
 ## Settings
 
@@ -77,9 +134,11 @@ the machine it runs on.
 - **Upload:** the default payment method (otherwise the first one), and the **Enable uploads** switch.
 - **Font size:** 0.5×–2.0×, applied immediately.
 
-Non-secret settings are stored in `~/.config/wint-receipts/config.json`. Categories and payment
-methods are cached in `~/.cache/wint-receipts/reference.json`. Both logs are written to the folder
-the app is started from, unless you change the path.
+Non-secret settings are stored in `~/.config/wint-receipts/config.json`, on every platform for now
+(on Windows that's `%USERPROFILE%\.config\wint-receipts`). Categories and payment methods are cached in
+`~/.cache/wint-receipts/reference.json`. `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` move them. Both logs are
+written to the folder the app is started from, unless you change the path in Settings. If you start a
+binary by double-clicking it, set the log paths explicitly.
 
 ## How recognition works
 
@@ -101,7 +160,7 @@ categories, so Claude can suggest one. The schema is `RECOGNITION_SCHEMA` in
 annotated by hand: authentication, paging, enums, the receipt lifecycle, and the full endpoint and
 schema listing.
 
-`bin/wint` is a small curl wrapper for manual API calls. It reads credentials from `.CREDENTIALS`,
+`bin/wint` is a small curl wrapper for manual API calls (bash, so Linux/macOS only). It reads credentials from `.CREDENTIALS`,
 logs every request to `wint-requests.log`, and refuses anything other than GET unless
 `WINT_ALLOW_WRITE=1` is set.
 
