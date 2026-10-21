@@ -23,6 +23,11 @@ Review state is saved next to the PDF as `<file>.pdf.wint.json`, so you can clos
 continue later. Every receipt has a stable `ClientId`, and the uploader checks it before creating
 anything, so a retried upload doesn't create duplicates.
 
+![Review screen](docs/design/03-review.png)
+
+The layout, colours, type, icons, components and interactions are described in
+[docs/design.md](docs/design.md).
+
 ## Requirements
 
 - Python 3.12 or newer
@@ -247,6 +252,7 @@ tests/                 pytest + pytest-qt
 scripts/build-binary.sh
 bin/wint               logged curl wrapper
 docs/wintapi.md        Wint API reference
+docs/design.md         design notes; docs/design/*.png are screens (Git LFS)
 ```
 
 ## Open items

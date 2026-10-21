@@ -1,0 +1,151 @@
+# Design notes
+
+How the app looks and behaves, and why. The colours, spacing and components here are the ones the
+code uses (`wint_receipts/app/theme.py`, `icons.py`, `empty_states.py`). The PNGs in `design/` are
+exported from the design file. They're stored with Git LFS, so run `git lfs install` before cloning
+to get the real images.
+
+## Principles
+
+- **The scan is the source of truth.** The page image always sits next to the fields read from it,
+  and everything is arranged around checking one against the other.
+- **Show doubt, don't hide it.** Claude reports the fields it wasn't sure about. Those are marked
+  amber, and errors that block approval are marked red. A clean form means there's nothing to check
+  beyond a glance.
+- **Nothing is final until it's uploaded.** Skipping, deleting, merging and editing can all be undone.
+  Upload is the only step that writes to Wint, and it asks for confirmation first.
+- **An empty pane explains itself.** Before there's anything to show, each pane says what will
+  appear there and what to do next.
+- **Same look on every desktop.** The app uses Qt's Fusion style with its own palette, so it looks the
+  same on GNOME, KDE, Windows and macOS. That also means there's no dark mode yet.
+
+## Layout
+
+![Review screen](design/03-review.png)
+
+The window has a toolbar, three panes side by side, and a status bar.
+
+| Pane | Default width | Content |
+|---|---|---|
+| Pages | 420 px (min 320) | One row per page: status dot, page number, date · amount · supplier |
+| Page image | flexible | The scan. Scroll to zoom, drag to pan, double-click to fit |
+| Receipt | 560 px | Fields, Claude's notes, check results, actions. Scrolls vertically only |
+
+- The panes are separated by **1 px** splitter lines in the border colour, and can be resized.
+- The **toolbar** holds the global actions, grouped by dividers: open/recognise · navigation and fit ·
+  preview/upload · reload/settings.
+- The **status bar** shows the company name, page counts by status, the recognition cost so far, and
+  whether uploads are on. When pages have been deleted, a *Restore deleted pages (N)* link appears on
+  its left.
+
+## Screens and states
+
+| State | Pages pane | Image pane | Receipt pane |
+|---|---|---|---|
+| No PDF open | Explains the list and the status colours | Steps 1–3 and *Open PDF* | Explains the fields, the colours and the shortcuts |
+| Recognising | Row shows "recognising" | The scan | "Claude is reading this receipt…" |
+| Failed / not recognised | Red or grey dot | The scan | Reason, plus *Recognise this page* and *Skip page* |
+| Review | Row summary | The scan | The editable form |
+
+![Empty state](design/01-empty.png)
+
+![Recognising](design/02-recognising.png)
+
+## Colour
+
+The palette is light only. All colours come from `theme.py`, and those values match the design
+file's variables.
+
+| Token | Value | Used for |
+|---|---|---|
+| `surface/window` | `#EFEFEF` | Window, toolbar, panes without content |
+| `surface/base` | `#FFFFFF` | Inputs, buttons, page list, scan background |
+| `surface/warning` | `#FBEFC9` | Field Claude wasn't sure about |
+| `surface/error` | `#F8DADA` | Field that blocks approval |
+| `border/default` | `#C9C9C9` | Input and button borders, dividers |
+| `text/primary` | `#1F1F1F` | Text, icon strokes |
+| `text/muted` | `#6E6E6E` | Secondary text, placeholders, disabled |
+| `text/on-accent` | `#FFFFFF` | Text on accent backgrounds |
+| `accent` | `#308CC6` | Primary button, selection, links, icon accents |
+
+Not design variables, used only for interaction states: hover `#E3E3E3`, pressed `#D6D6D6`, accent
+hover `#2878AB`.
+
+**Page status** (dot colour):
+
+| Status | Colour | | Status | Colour |
+|---|---|---|---|---|
+| waiting | `#9E9E9E` | | skipped | `#757575` |
+| recognising | `#1E88E5` | | uploading | `#1E88E5` |
+| needs review | `#F9A825` | | uploaded | `#2E7D32` |
+| approved | `#43A047` | | failed | `#E53935` |
+
+A status is never shown by colour alone. Each row also has text (the summary, or "recognising",
+"failed", …) and a tooltip, so the dots work for colour-blind users too. Dots have a white outline
+so they stay visible on the blue selected row.
+
+## Type
+
+- **Font:** the system UI font. That's Noto Sans on Fedora, and the design file uses Noto Sans too.
+- **Scale:** the whole UI is multiplied by *Settings → Font size* (0.5×–2.0× in steps of 0.1;
+  the default is 1.5×). The change applies immediately.
+- **Hierarchy:** form title is bold at 1.15×. Empty-state titles are bold at 1.35×. Secondary text
+  uses the muted colour at the same size, rather than a smaller one, so it stays readable when scaled.
+
+## Components
+
+![Components](design/components.png)
+
+- **Button.** *Primary* (accent fill, white semibold label) is used for exactly one action per
+  context: *Approve* in the form, *Open PDF* in the empty state. *Secondary* (white, 1 px border,
+  5 px radius) is for everything else. *Disabled* is grey with muted text.
+- **Status dot.** 12 px with a 1.5 px white ring, in the eight status colours above.
+- **Page row.** Status dot plus a one-line summary, cut off with "…" at the end.
+- **Field row.** Label column (about 130 px), then the input. *Default*, *Warning* (amber fill) and
+  *Error* (red fill) variants.
+- **Toolbar item.** 18 px icon at 1× scale, a 6 px gap, then the label. Flat, with a grey rounded
+  background on hover.
+- **Page context menu.** White with a 1 px border and 6 px radius; the selected item is filled with
+  the accent colour. It has *Delete page* (`Del`) and, when pages have been deleted, *Restore
+  deleted pages (N)*.
+
+## Icons
+
+Nine of the app's own outline icons on a 24×24 grid: stroke 1.8 with round caps and joins, in the
+text colour, with the accent colour on the part that carries the meaning:
+
+| Icon | Action | Accent on |
+|---|---|---|
+| folder | Open PDF | the receipt lines |
+| receipt + magnifier | Recognise all | the magnifier |
+| chevrons | Previous / Next | — |
+| corner brackets | Fit image | — |
+| page + `<>` | Preview request | the brackets |
+| cloud + arrow | Upload approved | the arrow |
+| circular arrows | Reload Wint data | — |
+| sliders | Settings | the middle knob |
+
+The icons are drawn from SVG at the screen's real resolution, so they stay sharp at any scale. When
+disabled, they turn the border grey. They grow with the font size.
+
+## Interaction
+
+| Action | How |
+|---|---|
+| Open a PDF | *Open PDF* (Ctrl+O), or drag a PDF onto the window |
+| Approve | *Approve* or Ctrl+Enter; moves on to the next page that needs review |
+| Next / previous page | PgDn / PgUp; deleted pages are skipped |
+| Zoom the scan | Mouse wheel; double-click to fit; Ctrl+0 to fit |
+| Merge a two-page receipt | *Attach to previous*; *Separate receipt* undoes it |
+| Remove a page | Right-click the page → *Delete page*, or `Del` in the list; Ctrl+Z restores |
+| Settings | Ctrl+, |
+
+- **Blank pages** never get a row; they count as deleted and can be restored.
+- **Editing** an approved receipt sends it back to *needs review*.
+- **Uploaded pages** are locked: they can't be edited, merged or deleted.
+
+## Not designed yet
+
+- Dark mode.
+- Guests on representation receipts (`Persons`).
+- What happens after upload in Wint (signing, payout status).
