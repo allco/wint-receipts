@@ -1,0 +1,307 @@
+"""UI flow with recognition and Wint mocked out (pytest-qt, offscreen)."""
+import json
+
+import pytest
+
+from wint_receipts.app import main_window as mw
+from wint_receipts.core import recognize
+from wint_receipts.core.config import Settings
+from wint_receipts.core.models import (
+    Category, PageKind, PageStatus, PaymentMethod, Recognition, ReferenceData,
+)
+from wint_receipts.core.session import session_path
+
+REF = ReferenceData(company_id=1, company_name="Test AB", categories=[Category(id=7, name="Parkering")],
+                    payment_methods=[PaymentMethod(id=16978, name="Eget utlägg", type=2)])
+
+
+def rec_for(index: int) -> Recognition:
+    if index == 2:
+        return Recognition(page_kind=PageKind.BLANK, notes="empty page")
+    return Recognition(page_kind=PageKind.RECEIPT, date="2026-10-20", total=44.85 + index, currency="SEK",
+                       supplier_name=f"Shop {index}", vat=[], category_id=7, uncertain_fields=["total"])
+
+
+@pytest.fixture
+def window(qtbot, monkeypatch, sample_pdf):
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    calls = []
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+
+    def fake_recognize(png, categories, **kw):
+        calls.append(1)
+        index = len(calls) - 1  # pages are queued in order; single worker keeps the order
+        return recognize.RecognitionResult(rec_for(index), 0.01)
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", fake_recognize)
+    w = mw.MainWindow(Settings(parallel_recognitions=1, default_payment_method_id=16978))
+    w._reference_loaded("reference", REF)
+    qtbot.addWidget(w)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    return w
+
+
+def test_recognition_fills_pages(window):
+    s = window.session
+    assert [p.status for p in s.pages] == [PageStatus.NEEDS_REVIEW, PageStatus.NEEDS_REVIEW, PageStatus.SKIPPED]
+    assert s.pages[0].draft.payment_method_id == 16978
+    assert "44.85" in window.page_list.item(0).text()
+
+
+def test_approve_edit_and_persist(window, qtbot, sample_pdf):
+    window.page_list.setCurrentRow(0)
+    window.form.supplier.setText("EasyPark")
+    window.form.supplier.textEdited.emit("EasyPark")
+    window._approve()
+    p0 = window.session.pages[0]
+    assert p0.status is PageStatus.APPROVED and p0.draft.supplier_name == "EasyPark"
+    assert window._current_index() == 1  # moved on to the next page needing review
+    window._save_now()
+    saved = json.loads(session_path(sample_pdf.resolve()).read_text())
+    assert saved["pages"][0]["status"] == "approved"
+
+
+def test_approve_blocked_on_errors(window):
+    window.page_list.setCurrentRow(0)
+    window.form.amount.setText("")
+    window.form.amount.textEdited.emit("")
+    window._approve()
+    assert window.session.pages[0].status is PageStatus.NEEDS_REVIEW
+
+
+def test_attach_and_detach(window):
+    window.page_list.setCurrentRow(1)
+    window._attach_to_previous()
+    s = window.session
+    assert s.pages[0].draft.pages == [0, 1] and s.pages[1].status is PageStatus.SKIPPED
+    assert "attached to page 1" in window.page_list.item(1).text()
+    window._detach()
+    assert s.pages[0].draft.pages == [0] and s.pages[1].status is PageStatus.NEEDS_REVIEW
+
+
+def test_upload_blocked_when_disabled(window, monkeypatch):
+    window.page_list.setCurrentRow(0)
+    window._approve()
+    shown = []
+    monkeypatch.setattr(mw.QMessageBox, "information", lambda *a: shown.append(a[2]))
+    monkeypatch.setattr(mw.MainWindow, "_client", lambda self, allow_writes=False: pytest.fail("no client"))
+    window._upload_approved()
+    assert shown and "turned off" in shown[0]
+
+
+def test_sole_payment_method_used_and_recognition_waits_for_reference(qtbot, monkeypatch, sample_pdf):
+    seen_categories = []
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: setattr(self, "_reference_loading", True))
+    monkeypatch.setattr(mw.MainWindow, "_load_cached_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+
+    def fake_recognize(png, categories, **kw):
+        seen_categories.append(len(categories))
+        return recognize.RecognitionResult(rec_for(0), 0.01)
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", fake_recognize)
+    w = mw.MainWindow(Settings(parallel_recognitions=1))  # no default payment method
+    qtbot.addWidget(w)
+    w._refresh_reference()
+    w.open_pdf(sample_pdf)
+    assert all(p.status is PageStatus.NEW for p in w.session.pages)  # waiting, not recognising
+    w._reference_loaded("reference", REF)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    assert seen_categories == [1, 1, 1]
+    assert all(p.draft.payment_method_id == 16978 for p in w.session.pages)
+
+
+def test_first_payment_method_preselected_when_several(qtbot, monkeypatch):
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    w = mw.MainWindow(Settings())
+    qtbot.addWidget(w)
+    w.reference = REF.model_copy(update={"payment_methods": [
+        PaymentMethod(id=1, name="Bankkort"), PaymentMethod(id=2, name="Eget utlägg")]})
+    assert w._default_payment_method() == 1
+    w.settings = Settings(default_payment_method_id=2)
+    assert w._default_payment_method() == 2
+
+
+def test_recognition_log(window, tmp_path):
+    lines = [json.loads(x) for x in (tmp_path / "recognition.log").read_text().splitlines()]
+    assert [e["event"] for e in lines] == ["recognized"] * 3
+    assert lines[0]["page"] == 1 and lines[0]["cost_usd"] == 0.01 and lines[0]["recognition"]["total"] == 44.85
+    window.page_list.setCurrentRow(0)
+    window.form.supplier.setText("EasyPark")
+    window.form.supplier.textEdited.emit("EasyPark")
+    window._approve()
+    approved = json.loads((tmp_path / "recognition.log").read_text().splitlines()[-1])
+    assert approved["event"] == "approved" and approved["changed"] == ["supplier_name"]
+    assert approved["final"]["supplier_name"] == "EasyPark" and approved["uncertain"] == ["total"]
+
+
+def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+
+    def boom(png, categories, **kw):
+        raise recognize.RecognitionError("claude timed out after 300s")
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", boom)
+    w = mw.MainWindow(Settings(parallel_recognitions=1))
+    qtbot.addWidget(w)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is PageStatus.FAILED for p in w.session.pages), timeout=10000)
+    lines = [json.loads(x) for x in (tmp_path / "recognition.log").read_text().splitlines()]
+    assert {e["event"] for e in lines} == {"failed"} and "timed out" in lines[0]["error"]
+
+
+def test_recognition_log_off(qtbot, monkeypatch, sample_pdf, tmp_path):
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.recognize, "recognize_png",
+                        lambda png, categories, **kw: recognize.RecognitionResult(rec_for(0), 0.01))
+    w = mw.MainWindow(Settings(parallel_recognitions=1, recognition_log_enabled=False))
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", REF)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    w.page_list.setCurrentRow(0)
+    w._approve()
+    assert w.session.pages[0].status is PageStatus.APPROVED
+    assert not (tmp_path / "recognition.log").exists()
+
+
+def test_font_scale_applies_live_and_cancel_reverts(qtbot):
+    from PySide6.QtWidgets import QApplication
+    from wint_receipts.app import fonts, settings_dialog
+
+    fonts.apply_font_scale(1.0)
+    base = QApplication.font().pointSizeF()
+    assert fonts.PRESETS[0] == 0.5 and fonts.PRESETS[-1] == 2.0 and len(fonts.PRESETS) == 16
+    dlg = settings_dialog.SettingsDialog(Settings(font_scale=1.0), None)
+    qtbot.addWidget(dlg)
+    dlg.font_scale.setCurrentIndex(dlg.font_scale.findData(1.5))
+    assert QApplication.font().pointSizeF() == pytest.approx(base * 1.5)
+    dlg.font_scale.setCurrentIndex(dlg.font_scale.findData(2.0))
+    assert QApplication.font().pointSizeF() == pytest.approx(base * 2.0)  # scales from the system font, not cumulative
+    dlg.reject()
+    assert QApplication.font().pointSizeF() == pytest.approx(base)
+
+
+def test_form_title_follows_app_font(qtbot):
+    from PySide6.QtWidgets import QApplication
+    from wint_receipts.app import fonts
+    from wint_receipts.app.receipt_form import ReceiptForm
+
+    fonts.apply_font_scale(1.0)
+    form = ReceiptForm()
+    qtbot.addWidget(form)
+    before = form.title.font().pointSizeF()
+    fonts.apply_font_scale(2.0)
+    QApplication.processEvents()
+    assert form.title.font().pointSizeF() == pytest.approx(before * 2.0)
+    fonts.apply_font_scale(1.0)
+
+
+def test_empty_states_and_pane_switching(qtbot, monkeypatch, sample_pdf):
+    import threading
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    gate = threading.Event()
+
+    def slow(png, categories, **kw):
+        gate.wait(5)
+        return recognize.RecognitionResult(rec_for(0), 0.01)
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", slow)
+    w = mw.MainWindow(Settings(parallel_recognitions=1))
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", REF)
+    assert (w.list_stack.currentIndex(), w.image_stack.currentIndex(), w.form_stack.currentIndex()) == (0, 0, 0)
+    w.open_pdf(sample_pdf)
+    assert (w.list_stack.currentIndex(), w.image_stack.currentIndex()) == (1, 1)
+    assert w.form_stack.currentIndex() == 1 and "reading" in w.form_waiting.title.text()
+    gate.set()
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    w.page_list.setCurrentRow(0)
+    assert w.form_stack.currentIndex() == 2  # the real form once a draft exists
+
+
+def test_drop_pdf_opens_it(qtbot, monkeypatch, sample_pdf):
+    from PySide6.QtCore import QMimeData, QPointF, QUrl, Qt
+    from PySide6.QtGui import QDropEvent
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    monkeypatch.setattr(mw.MainWindow, "_recognize", lambda self, indices, force=False: None)
+    w = mw.MainWindow(Settings())
+    qtbot.addWidget(w)
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(sample_pdf))])
+    ev = QDropEvent(QPointF(10, 10), Qt.DropAction.CopyAction, mime, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+    w.dropEvent(ev)
+    assert w.session is not None and len(w.session.pages) == 3
+
+
+def test_font_scale_reaches_main_window_under_style_sheet(qtbot, monkeypatch):
+    """Regression: the window style sheet froze widget fonts, so the live change did nothing."""
+    from PySide6.QtWidgets import QApplication
+    from wint_receipts.app import fonts
+
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    fonts.apply_font_scale(1.0)
+    base = QApplication.font().pointSizeF()
+    w = mw.MainWindow(Settings())
+    qtbot.addWidget(w)
+    w.show()
+    assert w.styleSheet()  # the case that used to break
+    fonts.apply_font_scale(2.0)
+    QApplication.processEvents()
+    for widget in (w.page_list, w.form.date, w.image_empty.body):
+        assert widget.font().pointSizeF() == pytest.approx(base * 2.0)
+    fonts.apply_font_scale(1.0)
+
+
+def test_delete_page_hides_it_and_can_be_restored(window, sample_pdf):
+    s = window.session
+    window.page_list.setCurrentRow(1)
+    window._delete_page()
+    assert s.pages[1].deleted and window.page_list.item(1).isHidden()
+    assert window._current_index() != 1
+    assert window.restore_btn.isVisibleTo(window) and "(1)" in window.restore_btn.text()
+    # navigation skips the deleted page
+    window.page_list.setCurrentRow(0)
+    window._step(1)
+    assert window._current_index() == 2
+    window._save_now()
+    again = mw.open_session(sample_pdf)
+    assert again.pages[1].deleted  # survives reopening; the PDF itself still has 3 pages
+    window._restore_last()
+    assert not s.pages[1].deleted and not window.page_list.item(1).isHidden()
+    assert not window.restore_btn.isVisibleTo(window)
+
+
+def test_delete_releases_attached_pages_and_owner(window):
+    s = window.session
+    window.page_list.setCurrentRow(1)
+    window._attach_to_previous()  # page 2 joins the receipt on page 1
+    assert s.pages[0].draft.pages == [0, 1]
+    window.page_list.setCurrentRow(0)
+    window._delete_page()  # deleting the owner frees page 2 again
+    assert s.pages[0].deleted and s.pages[1].status is PageStatus.NEEDS_REVIEW
+    assert s.pages[0].draft.pages == [0]
+    window._restore_all()
+    assert not s.pages[0].deleted
+
+
+def test_uploaded_page_cannot_be_deleted_and_deleted_not_uploaded(window):
+    s = window.session
+    s.pages[0].wint_receipt_id = 99
+    s.pages[0].status = PageStatus.UPLOADED
+    window.page_list.setCurrentRow(0)
+    window._delete_page()
+    assert not s.pages[0].deleted
+    s.pages[1].status = PageStatus.APPROVED
+    window.page_list.setCurrentRow(1)
+    window._delete_page()
+    assert window._approved() == []  # a deleted approved page is not uploaded
