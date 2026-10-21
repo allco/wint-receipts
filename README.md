@@ -11,7 +11,8 @@ A Linux desktop app that turns a PDF of scanned receipts (one receipt per page) 
    failed checks (VAT arithmetic, future dates, locked periods, missing category, ...) are marked in
    amber or red. Edit, then **Approve** (Ctrl+Enter).
    - A receipt that runs over two pages can be merged with **Attach to previous**.
-   - Blank pages and receipt backs are skipped automatically.
+   - Blank pages are left out of the list (*Restore deleted pages* brings them back if Claude was
+     wrong). Receipt backs are shown but skipped.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF

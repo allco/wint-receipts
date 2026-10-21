@@ -46,6 +46,9 @@ def window(qtbot, monkeypatch, sample_pdf):
 def test_recognition_fills_pages(window):
     s = window.session
     assert [p.status for p in s.pages] == [PageStatus.NEEDS_REVIEW, PageStatus.NEEDS_REVIEW, PageStatus.SKIPPED]
+    # the blank page is left out of the list, but can be restored
+    assert s.pages[2].deleted and window.page_list.item(2).isHidden()
+    assert "(1)" in window.restore_btn.text()
     assert s.pages[0].draft.payment_method_id == 16978
     assert "44.85" in window.page_list.item(0).text()
 
@@ -264,6 +267,7 @@ def test_font_scale_reaches_main_window_under_style_sheet(qtbot, monkeypatch):
 
 def test_delete_page_hides_it_and_can_be_restored(window, sample_pdf):
     s = window.session
+    window._restore_all()  # bring back the auto-removed blank page 3
     window.page_list.setCurrentRow(1)
     window._delete_page()
     assert s.pages[1].deleted and window.page_list.item(1).isHidden()
@@ -308,6 +312,7 @@ def test_uploaded_page_cannot_be_deleted_and_deleted_not_uploaded(window):
 
 
 def test_page_context_menu(window):
+    window._restore_all()  # start without the auto-removed blank page
     window.page_list.setCurrentRow(1)
     menu = window._page_menu()
     texts = [a.text() for a in menu.actions() if not a.isSeparator()]

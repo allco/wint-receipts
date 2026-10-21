@@ -507,6 +507,12 @@ class MainWindow(QMainWindow):
         if keep_pages:
             p.draft.pages = keep_pages
         p.status = PageStatus.SKIPPED if rec.page_kind in (PageKind.BLANK, PageKind.BACK_SIDE) else PageStatus.NEEDS_REVIEW
+        if rec.page_kind is PageKind.BLANK:
+            # Blank pages don't get a row; they can still be brought back with "Restore deleted pages".
+            p.deleted = True
+            if index == self._current_index():
+                self._step_away_from(index)
+            self.statusBar().showMessage(f"Page {index + 1} is blank and was left out of the list", 6000)
         self._after_page_change(index)
 
     def _recognition_failed(self, index: int, msg: str) -> None:
