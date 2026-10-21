@@ -44,16 +44,17 @@ The app talks to the Wint API with HTTP Basic auth: a **user name** and an **API
 by creating a *custom app* (Wint's name for your own integration) in the Wint web app:
 
 1. Log in at [app.wint.se](https://app.wint.se) as a user who can manage the company's settings.
-2. Open the company **Settings** and find **Integrations** (or *Integrationer*).
-3. Add a **custom app**, also called *own app* (category `OwnApp` in the API). Give it a name such as
+2. Go to **Inställningar → Integrationer → Lägg till integration** (*Settings → Integrations → Add
+   integration*).
+3. Choose your own app (a *custom app*, category `OwnApp` in the API). Give it a name such as
    "Wint receipts" and generate an API key for it.
-4. Make sure the app is **activated**.
+4. Make sure the integration is **activated**.
 5. Copy the **API key**, a UUID like `8f6c1c1e-…`, and the app's **user name**. In a verified setup,
    the user name was the company's numeric id, e.g. `12345`.
 
-These menu names come from Wint's API (`/api/Settings/Integration/CustomApp`, `GenerateCustomAppKey`),
-not from the web interface itself, so the exact labels may differ. If you can't find the option, ask
-Wint support for an *API key for a custom integration*.
+Steps 3–5 are based on Wint's API (`/api/Settings/Integration/CustomApp`, `GenerateCustomAppKey`), so the
+labels in that dialog may differ. If you can't find the option, ask Wint support for an *API key for a
+custom integration*.
 
 Treat the key like a password: it acts as your user, for that company. To revoke it, deactivate or
 delete the custom app in Wint. The API can also do it (`DELETE /api/auth/key`).
