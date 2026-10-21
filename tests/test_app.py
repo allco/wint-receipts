@@ -305,3 +305,21 @@ def test_uploaded_page_cannot_be_deleted_and_deleted_not_uploaded(window):
     window.page_list.setCurrentRow(1)
     window._delete_page()
     assert window._approved() == []  # a deleted approved page is not uploaded
+
+
+def test_page_context_menu(window):
+    window.page_list.setCurrentRow(1)
+    menu = window._page_menu()
+    texts = [a.text() for a in menu.actions() if not a.isSeparator()]
+    assert texts == ["Delete page"] and menu.actions()[0].isEnabled()
+    menu.actions()[0].trigger()
+    assert window.session.pages[1].deleted
+    menu = window._page_menu()  # now also offers restoring
+    restore = [a for a in menu.actions() if a.text().startswith("Restore deleted pages (1)")]
+    assert restore
+    restore[0].trigger()
+    assert not window.session.pages[1].deleted
+    window.session.pages[0].wint_receipt_id = 5
+    window.session.pages[0].status = PageStatus.UPLOADED
+    window.page_list.setCurrentRow(0)
+    assert not window._page_menu().actions()[0].isEnabled()  # uploaded pages can't be deleted

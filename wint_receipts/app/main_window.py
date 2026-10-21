@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, QSize, QThreadPool, QTimer, Qt
 from PySide6.QtGui import QAction, QBrush, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
     QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QStackedWidget, QToolBar, QVBoxLayout,
 )
 
@@ -68,6 +68,8 @@ class MainWindow(QMainWindow):
         self.page_list.setObjectName("pages")
         self.page_list.setMinimumWidth(320)
         self.page_list.currentRowChanged.connect(self._show_page)
+        self.page_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.page_list.customContextMenuRequested.connect(self._show_page_menu)
         self.image = ImageView()
         self.image.setAcceptDrops(False)  # let PDF drops reach the window
         self.image.viewport().setAcceptDrops(False)
@@ -79,7 +81,6 @@ class MainWindow(QMainWindow):
         self.form.rerecognize_requested.connect(lambda: self._recognize([self._current_index()], force=True))
         self.form.attach_to_previous_requested.connect(self._attach_to_previous)
         self.form.detach_requested.connect(self._detach)
-        self.form.delete_requested.connect(self._delete_page)
         self._deleted_stack: list[int] = []  # for Ctrl+Z, most recent last
 
         self._build_empty_states()
@@ -152,7 +153,6 @@ class MainWindow(QMainWindow):
             width_em=10)
         self.form_waiting = es.EmptyState(es.READING_SVG, "", "", width_em=10)
         self._waiting_buttons = [
-            self.form_waiting.add_button("Delete page", self._delete_page),
             self.form_waiting.add_button("Recognise this page", lambda: self._recognize([self._current_index()], force=True),
                                          primary=True),
             self.form_waiting.add_button("Skip page", self._toggle_skip),
@@ -634,12 +634,36 @@ class MainWindow(QMainWindow):
         self._refresh_item(owner.index)
         self._after_page_change(index)
 
+    def _can_delete(self, p: PageState) -> bool:
+        return not p.deleted and p.wint_receipt_id is None and p.status not in (PageStatus.UPLOADING, PageStatus.RECOGNIZING)
+
+    def _page_menu(self) -> QMenu:
+        """Context menu for the current page in the list."""
+        menu = QMenu(self.page_list)
+        p = self._page(self._current_index())
+        delete = menu.addAction("Delete page", self._delete_page)
+        delete.setShortcut(QKeySequence.StandardKey.Delete)  # shown as a hint; the shortcut lives on the list
+        delete.setEnabled(p is not None and self._can_delete(p))
+        if p is not None and not delete.isEnabled():
+            delete.setToolTip("Uploaded pages and pages being processed can't be deleted")
+        deleted = sum(q.deleted for q in self.session.pages) if self.session else 0
+        if deleted:
+            menu.addSeparator()
+            menu.addAction(f"Restore deleted pages ({deleted})", self._restore_all)
+        return menu
+
+    def _show_page_menu(self, pos) -> None:
+        item = self.page_list.itemAt(pos)
+        if item is not None:
+            self.page_list.setCurrentItem(item)  # right-click selects the page it acts on
+        self._page_menu().exec(self.page_list.viewport().mapToGlobal(pos))
+
     def _delete_page(self) -> None:
         index = self._current_index()
         p = self._page(index)
         if p is None or p.deleted:
             return
-        if p.wint_receipt_id is not None or p.status in (PageStatus.UPLOADING, PageStatus.RECOGNIZING):
+        if not self._can_delete(p):
             self.statusBar().showMessage("This page can't be deleted while it is being processed or after it is uploaded", 6000)
             return
         # Detach from the receipt it belongs to, and release pages attached to it.

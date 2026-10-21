@@ -45,9 +45,11 @@ QPushButton {{
 QPushButton:hover {{ background: {SURFACE_HOVER}; }}
 QPushButton:pressed {{ background: {SURFACE_PRESSED}; }}
 QPushButton:disabled {{ background: {SURFACE_WINDOW}; color: {TEXT_MUTED}; }}
-QPushButton#danger {{ color: {ERROR_TEXT}; }}
-QPushButton#danger:hover {{ background: {SURFACE_ERROR}; border-color: {ERROR_TEXT}; }}
-QPushButton#danger:disabled {{ color: {TEXT_MUTED}; }}
+QMenu {{ background: {SURFACE_BASE}; border: 1px solid {BORDER}; border-radius: 6px; padding: 4px; }}
+QMenu::item {{ padding: 6px 28px 6px 14px; border-radius: 4px; color: {TEXT}; }}
+QMenu::item:selected {{ background: {ACCENT}; color: {TEXT_ON_ACCENT}; }}
+QMenu::item:disabled {{ color: {TEXT_MUTED}; background: transparent; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 6px; }}
 QPushButton#link {{ background: transparent; border: none; color: {ACCENT}; padding: 0 6px; text-decoration: underline; }}
 QPushButton#primary {{
     background: {ACCENT}; color: {TEXT_ON_ACCENT};

@@ -38,7 +38,6 @@ class ReceiptForm(QWidget):
     rerecognize_requested = Signal()
     attach_to_previous_requested = Signal()
     detach_requested = Signal()
-    delete_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,17 +94,12 @@ class ReceiptForm(QWidget):
         self.attach_btn.clicked.connect(self.attach_to_previous_requested)
         self.detach_btn = QPushButton("Separate receipt")
         self.detach_btn.clicked.connect(self.detach_requested)
-        self.delete_btn = QPushButton("Delete page")
-        self.delete_btn.setObjectName("danger")
-        self.delete_btn.setToolTip("Remove this page from the review (the PDF file is not changed). Ctrl+Z restores it.")
-        self.delete_btn.clicked.connect(self.delete_requested)
         # Two columns so the pane stays narrow at large font sizes.
         actions = QGridLayout()
         actions.addWidget(self.approve_btn, 0, 0)
         actions.addWidget(self.skip_btn, 0, 1)
         actions.addWidget(self.rerec_btn, 1, 0)
         actions.addWidget(self.attach_btn, 1, 1)
-        actions.addWidget(self.delete_btn, 2, 0)
         actions.addWidget(self.detach_btn, 2, 1)
 
         lay = QVBoxLayout(self)
@@ -164,7 +158,7 @@ class ReceiptForm(QWidget):
                 self._fill(ReceiptDraft())
                 self.notes.setPlainText("")
                 self.pages.setText("")
-                for b in (self.skip_btn, self.rerec_btn, self.attach_btn, self.detach_btn, self.delete_btn):
+                for b in (self.skip_btn, self.rerec_btn, self.attach_btn, self.detach_btn):
                     b.setEnabled(False)
                 return
             status = page.status.value.replace("_", " ")
@@ -189,7 +183,6 @@ class ReceiptForm(QWidget):
             self.rerec_btn.setEnabled(not busy and merged_into is None)
             self.attach_btn.setEnabled(not busy and merged_into is None and page.index > 0)
             self.detach_btn.setEnabled(merged_into is not None and page.status is not PageStatus.UPLOADED)
-            self.delete_btn.setEnabled(not busy and page.wint_receipt_id is None)
         finally:
             self._loading = False
 
