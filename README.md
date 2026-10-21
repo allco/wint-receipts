@@ -1,12 +1,62 @@
-# Wint receipts — scan, check, upload
+# Wint receipts — AI reads your receipts, you check, Wint books them
 
-A desktop app (Python + Qt) that turns a PDF of scanned receipts (one receipt per page) into
-receipts in [Wint](https://wint.se):
+**Scan a stack of receipts into one PDF. Claude AI reads each page: date, amount, VAT, supplier and
+category. You check its reading next to the scan and upload the lot to [Wint](https://wint.se).
+No manual typing.**
 
-1. **Open a PDF.** Drag it onto the window, or use *Open PDF*. Each page is rendered and sent to the
-   [`claude` CLI](https://docs.claude.com/en/docs/claude-code), which reads the receipt and returns
-   structured JSON: date, total, currency, supplier, VAT lines, a suggested category, and the fields
-   it wasn't sure about.
+A desktop app (Python + Qt) built around AI receipt recognition, with a person approving every
+receipt before it reaches the bookkeeping.
+
+![Review screen: the scan on the left, the AI-read fields on the right](docs/design/03-review.png)
+
+## What the AI does
+
+Every page is read by [Claude](https://www.anthropic.com/claude) through the `claude` CLI, and it
+comes back as structured data rather than free text:
+
+| Read from the receipt | Example |
+|---|---|
+| Purchase date | `2026-10-20`, from formats like *20.10.26* or *2026-10-20* |
+| Amount paid incl. VAT | the real total, not the subtotal, a VAT line or the change given |
+| Currency | `SEK`, `EUR`, … |
+| Supplier and org. number | *Clas Ohlson AB*, `556xxx-xxxx` |
+| VAT per rate | 25 % · 12 % · 6 %, with net amounts when printed |
+| What was bought | a short description in the receipt's language |
+| **Category** | picked from *your* Wint company's receipt categories |
+
+What it does beyond reading the text:
+
+- **Says when it isn't sure.** Faded print, cut-off totals, handwriting or several candidate totals
+  are returned as *uncertain fields*. The app marks those amber, so you know exactly where to look.
+- **Knows what it's looking at.** It recognises blank pages (left out of the list), receipt backs
+  (skipped), and pages that continue the receipt before them (the app suggests merging).
+- **Gets checked by the app.** Net + VAT must add up to the total, VAT rates should be Swedish ones,
+  dates can't be in the future or in a locked period. Anything off is flagged before you approve.
+- **Shows where it goes wrong.** Every approval can be logged with the fields you corrected, so you
+  can see which fields the AI gets wrong most often (see *Recognition log* under Settings).
+- **Is fast and cheap.** About 3–7 s and $0.03 per page with Claude Sonnet. Several pages are read
+  in parallel while you review the first ones.
+
+### How it works
+
+For each page the app renders the PDF page as an image and runs:
+
+```
+claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet \
+  --tools Read --allowedTools Read --restricted --strict-mcp-config --no-session-persistence
+```
+
+- The command runs in a temporary directory that contains only that page image. Claude can only read
+  the image: no other tools, no settings, no saved session.
+- The prompt includes the company's receipt categories, so the suggestion is a real Wint category id.
+- `--json-schema` makes the answer match `RECOGNITION_SCHEMA` (`wint_receipts/core/recognize.py`), and
+  the app validates it again with pydantic.
+- The model is configurable in Settings: `sonnet`, `opus` for the hardest scans, or `haiku`.
+
+## The workflow
+
+1. **Open a PDF.** Drag it onto the window, or use *Open PDF*. Claude starts reading every page right
+   away.
 2. **Review.** For each page you see the scan next to the recognised fields. Uncertain fields and
    failed checks (VAT arithmetic, future dates, locked periods, missing category, ...) are marked in
    amber or red. Edit, then **Approve** (Ctrl+Enter).
@@ -22,8 +72,6 @@ receipts in [Wint](https://wint.se):
 Review state is saved next to the PDF as `<file>.pdf.wint.json`, so you can close the app and
 continue later. Every receipt has a stable `ClientId`, and the uploader checks it before creating
 anything, so a retried upload doesn't create duplicates.
-
-![Review screen](docs/design/03-review.png)
 
 The layout, colours, type, icons, components and interactions are described in
 [docs/design.md](docs/design.md).
@@ -189,20 +237,6 @@ Non-secret settings are stored in `~/.config/wint-receipts/config.json`, on ever
 `~/.cache/wint-receipts/reference.json`. `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` move them. Both logs are
 written to the folder the app is started from, unless you change the path in Settings. If you start a
 binary by double-clicking it, set the log paths explicitly.
-
-## How recognition works
-
-For each page the app runs:
-
-```
-claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet \
-  --tools Read --allowedTools Read --restricted --strict-mcp-config --no-session-persistence
-```
-
-The command runs in a temporary directory containing only the page image. Claude can only read that
-image. Nothing else is allowed, and no session is saved. The prompt includes the company's receipt
-categories, so Claude can suggest one. The schema is `RECOGNITION_SCHEMA` in
-`wint_receipts/core/recognize.py`. A typical page takes 3–7 s and costs about $0.03 with Sonnet.
 
 ## Wint API
 
