@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wint-receipts"
+version = "0.1.0"
+description = "Split a PDF of scanned receipts, recognise them with the claude CLI, review, and upload to Wint"
+requires-python = ">=3.12"
+dependencies = [
+  "PySide6>=6.8",
+  "pypdfium2>=4.30",
+  "Pillow>=10",
+  "pydantic>=2.9",
+  "httpx>=0.27",
+  "keyring>=25",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4.4"]
+
+[project.scripts]
+wint-receipts = "wint_receipts.app.main:main"
+
+[tool.setuptools.packages.find]
+include = ["wint_receipts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
