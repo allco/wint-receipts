@@ -7,6 +7,9 @@ to get the real images.
 
 ## Principles
 
+- **AI does the reading, a person decides.** Everything Claude AI reads is labelled as AI output
+  (*Read with AI*, *AI notes*, *VAT (AI-read)*, *AI cost*), and the sparkle icon marks AI actions.
+  Nothing goes to Wint without a person approving it.
 - **The scan is the source of truth.** The page image always sits next to the fields read from it,
   and everything is arranged around checking one against the other.
 - **Show doubt, don't hide it.** Claude reports the fields it wasn't sure about. Those are marked
@@ -29,12 +32,12 @@ The window has a toolbar, three panes side by side, and a status bar.
 |---|---|---|
 | Pages | 420 px (min 320) | One row per page: status dot, page number, date · amount · supplier |
 | Page image | flexible | The scan. Scroll to zoom, drag to pan, double-click to fit |
-| Receipt | 560 px | Fields, Claude's notes, check results, actions. Scrolls vertically only |
+| Receipt | 560 px | AI-read fields, AI notes, check results, actions. Scrolls vertically only |
 
 - The panes are separated by **1 px** splitter lines in the border colour, and can be resized.
 - The **toolbar** holds the global actions, grouped by dividers: open/recognise · navigation and fit ·
   preview/upload · reload/settings.
-- The **status bar** shows the company name, page counts by status, the recognition cost so far, and
+- The **status bar** shows the company name, page counts by status, the AI cost so far, and
   whether uploads are on. When pages have been deleted, a *Restore deleted pages (N)* link appears on
   its left.
 
@@ -43,13 +46,13 @@ The window has a toolbar, three panes side by side, and a status bar.
 | State | Pages pane | Image pane | Receipt pane |
 |---|---|---|---|
 | No PDF open | Explains the list and the status colours | Steps 1–3 and *Open PDF* | Explains the fields, the colours and the shortcuts |
-| Recognising | Row shows "recognising" | The scan | "Claude is reading this receipt…" |
-| Failed / not recognised | Red or grey dot | The scan | Reason, plus *Recognise this page* and *Skip page* |
+| AI reading | Row shows "AI reading" | The scan | "Claude AI is reading this receipt…" |
+| Failed / not read yet | Red or grey dot | The scan | Reason, plus *Read with AI* and *Skip page* |
 | Review | Row summary | The scan | The editable form |
 
 ![Empty state](design/01-empty.png)
 
-![Recognising](design/02-recognising.png)
+![AI reading](design/02-recognising.png)
 
 ## Colour
 
@@ -76,11 +79,11 @@ hover `#2878AB`.
 | Status | Colour | | Status | Colour |
 |---|---|---|---|---|
 | waiting | `#9E9E9E` | | skipped | `#757575` |
-| recognising | `#1E88E5` | | uploading | `#1E88E5` |
+| AI reading | `#1E88E5` | | uploading | `#1E88E5` |
 | needs review | `#F9A825` | | uploaded | `#2E7D32` |
 | approved | `#43A047` | | failed | `#E53935` |
 
-A status is never shown by colour alone. Each row also has text (the summary, or "recognising",
+A status is never shown by colour alone. Each row also has text (the summary, or "AI reading",
 "failed", …) and a tooltip, so the dots work for colour-blind users too. Dots have a white outline
 so they stay visible on the blue selected row.
 
@@ -117,7 +120,7 @@ text colour, with the accent colour on the part that carries the meaning:
 | Icon | Action | Accent on |
 |---|---|---|
 | folder | Open PDF | the receipt lines |
-| receipt + magnifier | Recognise all | the magnifier |
+| receipt + sparkles | Read with AI | the sparkles (the app's AI mark) |
 | chevrons | Previous / Next | — |
 | corner brackets | Fit image | — |
 | page + `<>` | Preview request | the brackets |
