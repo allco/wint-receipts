@@ -328,3 +328,21 @@ def test_page_context_menu(window):
     window.session.pages[0].status = PageStatus.UPLOADED
     window.page_list.setCurrentRow(0)
     assert not window._page_menu().actions()[0].isEnabled()  # uploaded pages can't be deleted
+
+
+def test_payment_method_prefilled_for_saved_drafts(qtbot, monkeypatch, sample_pdf):
+    """Drafts saved without a payment method get the first available one when the PDF is reopened."""
+    from wint_receipts.core.models import ReceiptDraft
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    sess = mw.open_session(sample_pdf)
+    for p in sess.pages:
+        p.draft = ReceiptDraft(amount=10.0, pages=[p.index])  # no payment method
+        p.status = PageStatus.NEEDS_REVIEW
+    mw.save_session(sess)
+    w = mw.MainWindow(Settings())  # no default in settings
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", REF.model_copy(update={"payment_methods": [
+        PaymentMethod(id=1, name="Bankkort"), PaymentMethod(id=2, name="Eget utlägg")]}))
+    w.open_pdf(sample_pdf)
+    assert [p.draft.payment_method_id for p in w.session.pages] == [1, 1, 1]
+    assert w.form.payment.currentData() == 1

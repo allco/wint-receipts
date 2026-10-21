@@ -321,7 +321,8 @@ class MainWindow(QMainWindow):
         if default is None or not self.session:
             return
         for p in self.session.pages:
-            if p.draft and p.draft.payment_method_id is None and p.status is PageStatus.NEEDS_REVIEW:
+            if p.draft and p.draft.payment_method_id is None and p.status in (
+                    PageStatus.NEEDS_REVIEW, PageStatus.FAILED, PageStatus.SKIPPED):
                 p.draft.payment_method_id = default
                 self._after_page_change(p.index)
 
@@ -357,6 +358,7 @@ class MainWindow(QMainWindow):
         visible = [p for p in session.pages if not p.deleted]
         self.page_list.setCurrentRow(next((p.index for p in visible if p.status in (PageStatus.NEEDS_REVIEW, PageStatus.NEW)),
                                           visible[0].index if visible else -1))
+        self._fill_default_payment_method()
         self._update_status()
         if any(p.status is PageStatus.NEW for p in session.pages):
             if self.reference is None and self._reference_loading:
@@ -424,6 +426,10 @@ class MainWindow(QMainWindow):
             except Exception as e:  # noqa: BLE001
                 self.statusBar().showMessage(f"Could not render page {index + 1}: {e}", 8000)
         self.image.set_png(self._display_cache.get(index))
+        if p.draft and p.draft.payment_method_id is None and p.status is not PageStatus.UPLOADED:
+            if (default := self._default_payment_method()) is not None:
+                p.draft.payment_method_id = default
+                self._schedule_save()
         self.form.set_page(p, self._owner_of(index))
         self._run_checks()
         self._sync_panes()
