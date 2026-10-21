@@ -28,14 +28,58 @@ anything, so a retried upload doesn't create duplicates.
 - Python 3.12 or newer
 - The [`claude` CLI](https://docs.claude.com/en/docs/claude-code), installed and logged in. Check with
   `claude --version`.
-- A Wint API key: in the Wint web app, *Settings → Integrations → custom app*. The user name is your
-  company id.
+- A Wint user name and API key. See [Getting credentials](#getting-credentials).
 
 | Platform | Status |
 |---|---|
 | Linux | Tested (Fedora, Wayland) |
 | Windows 10/11 | Should work; not tested yet |
 | macOS (Apple Silicon or Intel) | Should work; not tested yet |
+
+## Getting credentials
+
+### Wint API key
+
+The app talks to the Wint API with HTTP Basic auth: a **user name** and an **API key**. You get both
+by creating a *custom app* (Wint's name for your own integration) in the Wint web app:
+
+1. Log in at [app.wint.se](https://app.wint.se) as a user who can manage the company's settings.
+2. Open the company **Settings** and find **Integrations** (or *Integrationer*).
+3. Add a **custom app**, also called *own app* (category `OwnApp` in the API). Give it a name such as
+   "Wint receipts" and generate an API key for it.
+4. Make sure the app is **activated**.
+5. Copy the **API key**, a UUID like `8f6c1c1e-…`, and the app's **user name**. In a verified setup,
+   the user name was the company's numeric id, e.g. `12345`.
+
+These menu names come from Wint's API (`/api/Settings/Integration/CustomApp`, `GenerateCustomAppKey`),
+not from the web interface itself, so the exact labels may differ. If you can't find the option, ask
+Wint support for an *API key for a custom integration*.
+
+Treat the key like a password: it acts as your user, for that company. To revoke it, deactivate or
+delete the custom app in Wint. The API can also do it (`DELETE /api/auth/key`).
+
+**Check it works**, either way:
+
+- In the app: *Settings → Test connection*. It makes a read-only `GET /api/Auth` and shows the
+  company name.
+- From a shell, with `WINT_USER` / `WINT_TOKEN` set: `bin/wint -n "check credentials" /api/Auth | jq '{Id, Name}'`.
+  The `Id` it returns is the company id.
+
+To create receipts, the user also needs Wint's receipt permissions. `GET /api/Auth` shows them as
+`ReceiptCreator` and `ReceiptViewer`.
+
+### claude CLI
+
+Recognition runs through [Claude Code](https://docs.claude.com/en/docs/claude-code)'s `claude`
+command, billed to your Claude subscription or Anthropic API account.
+
+1. Install it by following the [installation guide](https://docs.claude.com/en/docs/claude-code/setup).
+2. Run `claude` once in a terminal and complete the login it asks for.
+3. Check: `claude --version` prints a version, and `claude -p "say ok"` answers.
+
+The app calls the same `claude` command, so no separate key is needed. If `claude` isn't on the `PATH`
+the app sees (common on Windows, or when starting it from a desktop launcher), enter its full path in
+*Settings → claude command*.
 
 ## Run from source
 
