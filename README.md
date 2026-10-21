@@ -12,8 +12,8 @@ A Linux desktop app that turns a PDF of scanned receipts (one receipt per page) 
    amber or red. Edit, then **Approve** (Ctrl+Enter).
    - A receipt that runs over two pages can be merged with **Attach to previous**.
    - Blank pages and receipt backs are skipped automatically.
-   - **Delete page** removes a page from the review. The PDF file isn't changed, and Ctrl+Z or
-     *Restore deleted pages* brings it back.
+   - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
+     The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
    attachment. **Uploads are disabled by default** until the create-receipt API has been tested.
    Until then, **Preview request** shows the exact JSON that would be sent.
