@@ -61,6 +61,7 @@ class WintClient:
         if not self.log_path:
             return
         line = json.dumps(entry, ensure_ascii=False)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self._log_lock, self.log_path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
 

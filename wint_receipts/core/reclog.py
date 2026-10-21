@@ -26,6 +26,7 @@ def write(path: Path | None, entry: dict[str, Any]) -> None:
     if not path:
         return
     line = json.dumps({"ts": now(), **entry}, ensure_ascii=False, default=str)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with _lock, path.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
 

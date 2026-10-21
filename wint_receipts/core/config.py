@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,22 +19,44 @@ ENV_USER = "WINT_USER"
 ENV_TOKEN = "WINT_TOKEN"
 
 
+APP_DIR = "wint-receipts"
+
+
 def config_dir() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "wint-receipts"
+    """Per-user settings folder: XDG_CONFIG_HOME if set, else the platform's usual place."""
+    if base := os.environ.get("XDG_CONFIG_HOME"):
+        return Path(base) / APP_DIR
+    if sys.platform == "win32":
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / APP_DIR
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / APP_DIR
+    return Path.home() / ".config" / APP_DIR
 
 
 def cache_dir() -> Path:
-    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "wint-receipts"
+    if base := os.environ.get("XDG_CACHE_HOME"):
+        return Path(base) / APP_DIR
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / APP_DIR / "cache"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / APP_DIR
+    return Path.home() / ".cache" / APP_DIR
+
+
+def default_log_dir() -> Path:
+    """Where logs go by default: the start folder, except for a packaged app on Windows/macOS,
+    which is usually started by double-click with an arbitrary working directory."""
+    if getattr(sys, "frozen", False) and sys.platform in ("win32", "darwin"):
+        return config_dir() / "logs"
+    return Path.cwd()
 
 
 class Settings(BaseModel):
     wint_base_url: str = "https://api.wint.se"
     wint_user: str = ""  # company id; the key itself is in the keyring
-    # Logs default to the directory the app is started from.
-    request_log: str = Field(default_factory=lambda: str(Path.cwd() / "wint-requests.log"))
-    recognition_log: str = Field(default_factory=lambda: str(Path.cwd() / "recognition.log"))
+    # Logs default to the start folder (see default_log_dir).
+    request_log: str = Field(default_factory=lambda: str(default_log_dir() / "wint-requests.log"))
+    recognition_log: str = Field(default_factory=lambda: str(default_log_dir() / "recognition.log"))
     request_log_enabled: bool = True
     recognition_log_enabled: bool = True
     claude_path: str = "claude"

@@ -71,7 +71,8 @@ def test_parse_output_errors(stdout):
 def test_command_restricts_tools_and_lists_categories():
     prompt = recognize.build_prompt("page.png", [Category(id=7, name="Parkering")])
     assert "7: Parkering" in prompt and "page.png" in prompt
-    cmd = recognize.build_command("claude", "sonnet", prompt)
+    cmd = recognize.build_command("claude", "sonnet")
+    assert "-p" in cmd and prompt not in cmd  # the prompt goes to stdin
     assert cmd[cmd.index("--tools") + 1] == "Read"
     assert "--restricted" in cmd and "--no-session-persistence" in cmd
     assert json.loads(cmd[cmd.index("--json-schema") + 1]) == recognize.RECOGNITION_SCHEMA
@@ -88,6 +89,7 @@ def test_recognize_png_runs_cli(monkeypatch):
         seen["cwd"] = cwd
         from pathlib import Path
         assert (Path(cwd) / "page.png").read_bytes() == b"PNG"
+        assert "page.png" in kw["input"]  # prompt passed on stdin
         return type("P", (), {"returncode": 0, "stdout": json.dumps(CLI_OK), "stderr": ""})()
 
     monkeypatch.setattr(recognize.subprocess, "run", fake_run)
@@ -331,3 +333,24 @@ def test_logs_enabled_by_default_and_can_be_turned_off(tmp_path):
     assert s.recognition_log_path() == tmp_path / "recognition.log"
     off = Settings(request_log_enabled=False, recognition_log_enabled=False)
     assert off.request_log_path() is None and off.recognition_log_path() is None
+
+
+@pytest.mark.parametrize("platform, expected", [
+    ("linux", ".config/wint-receipts"),
+    ("darwin", "Library/Application Support/wint-receipts"),
+    ("win32", "Roaming/wint-receipts"),
+])
+def test_config_dir_per_platform(monkeypatch, tmp_path, platform, expected):
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    monkeypatch.setattr(config.sys, "platform", platform)
+    monkeypatch.setattr(config.Path, "home", lambda: tmp_path)
+    assert config.config_dir().as_posix().endswith(expected)
+
+
+def test_frozen_app_logs_to_data_dir_on_windows(monkeypatch, tmp_path):
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    assert config.default_log_dir() == config.config_dir() / "logs"
+    monkeypatch.setattr(config.sys, "platform", "linux")
+    assert config.default_log_dir() == tmp_path  # Linux keeps the start folder (cwd)

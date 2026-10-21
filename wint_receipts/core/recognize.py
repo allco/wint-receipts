@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -85,9 +86,15 @@ def build_prompt(image_name: str, categories: Sequence[Category]) -> str:
     return PROMPT.format(image=image_name, categories=cats)
 
 
-def build_command(claude_path: str, model: str, prompt: str) -> list[str]:
+def resolve_claude(claude_path: str) -> str:
+    """Full path of the claude CLI; finds claude.exe / claude.cmd on Windows too."""
+    return shutil.which(claude_path) or claude_path
+
+
+def build_command(claude_path: str, model: str) -> list[str]:
+    """The prompt goes to stdin, so its line breaks survive argument quoting on every platform."""
     return [
-        claude_path, "-p", prompt,
+        claude_path, "-p",
         "--output-format", "json",
         "--json-schema", json.dumps(RECOGNITION_SCHEMA),
         "--model", model,
@@ -130,10 +137,11 @@ def recognize_png(
     with tempfile.TemporaryDirectory(prefix="wint-page-") as tmp:
         image = Path(tmp) / "page.png"
         image.write_bytes(png)
-        cmd = build_command(claude_path, model, build_prompt(image.name, categories))
+        cmd = build_command(resolve_claude(claude_path), model)
         start = time.monotonic()
         try:
-            proc = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+            proc = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, encoding="utf-8",
+                                  timeout=timeout, input=build_prompt(image.name, categories))
         except FileNotFoundError as e:
             raise RecognitionError(f"claude CLI not found at {claude_path!r}") from e
         except subprocess.TimeoutExpired as e:
