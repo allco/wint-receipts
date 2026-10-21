@@ -1,0 +1,32 @@
+# secrets
+.CREDENTIALS
+.env
+
+# request and recognition history (contain receipt data)
+wint-requests.log
+recognition.log
+*.log
+
+# receipts and per-PDF review state (personal data)
+*.pdf
+*.wint.json
+*.wint.json.tmp
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
