@@ -1,4 +1,6 @@
-# Wint receipts — AI reads your receipts, you check, Wint books them
+# Wint receipts
+
+## AI reads your receipts, you check, Wint books them
 
 **Scan a stack of receipts into one PDF. Claude AI reads each page: date, amount, VAT, supplier and
 category. You check its reading next to the scan and upload the lot to [Wint](https://wint.se).
@@ -159,8 +161,10 @@ py -3 -m venv .venv
 ```
 
 Install Python from [python.org](https://www.python.org/downloads/) and tick *Add python.exe to
-PATH*. If the app reports that it can't find the claude CLI, open *Settings → claude command* and enter
-the full path from `where.exe claude`, e.g. `C:\Users\you\AppData\Roaming\npm\claude.cmd`.
+PATH*. The app finds `claude.exe` (native installer) or `claude.cmd` (npm) on the `PATH` by itself.
+Prefer the native installer: the JSON schema argument passes through `cmd.exe` with the npm shim,
+which is more fragile. If the app reports that it can't find the claude CLI, open *Settings → claude
+command* and enter the full path from `where.exe claude`.
 
 ### Wint credentials
 
@@ -182,7 +186,33 @@ $env:WINT_USER = "<company id>"; $env:WINT_TOKEN = "<api key uuid>"
 .venv\Scripts\wint-receipts
 ```
 
-## Single binary
+## Download a release
+
+Ready-built binaries for Linux (x86_64), Windows (x86_64) and macOS (Apple Silicon) are attached to
+each [GitHub Release](../../releases), together with a `SHA256SUMS.txt`. They still need the `claude`
+CLI installed and logged in on the machine they run on.
+
+| Platform | File | Run |
+|---|---|---|
+| Linux | `wint-receipts-vX.Y.Z-linux-x86_64` | `chmod +x` it, then start it |
+| Windows | `wint-receipts-vX.Y.Z-windows-x86_64.exe` | double-click |
+| macOS | `wint-receipts-vX.Y.Z-macos-arm64.zip` | unzip, then right-click `wint-receipts.app` → *Open* |
+
+### Making a release
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) when a **semver tag** is
+pushed:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+For each platform, the workflow runs the tests, builds the binary, and checks that it starts. Then it
+creates the release with the three binaries, checksums and generated release notes. A tag with a
+suffix, such as `v1.0.0-rc.1`, becomes a pre-release. Tags that aren't semver don't start the workflow.
+
+## Build a binary yourself
 
 PyInstaller bundles Python, Qt and the app into one executable. It doesn't cross-compile, so build
 on each platform for that platform. The result still needs the `claude` CLI on the machine it runs
@@ -191,7 +221,7 @@ on, and it's a snapshot of the code, so rebuild it after changes.
 Linux / macOS:
 
 ```bash
-scripts/build-binary.sh        # → dist/wint-receipts (about 96 MB)
+scripts/build-binary.sh        # → dist/wint-receipts (Linux, about 96 MB) or dist/wint-receipts.app (macOS)
 . ./.CREDENTIALS && dist/wint-receipts
 ```
 
@@ -199,10 +229,12 @@ Windows (PowerShell):
 
 ```powershell
 .venv\Scripts\pip install pyinstaller
-.venv\Scripts\pyinstaller --noconfirm --clean --onefile --windowed --name wint-receipts `
-  --collect-data pypdfium2_raw --collect-binaries pypdfium2_raw wint_receipts\__main__.py
+.venv\Scripts\python scripts\build.py     # → dist\wint-receipts.exe
 dist\wint-receipts.exe
 ```
+
+`python scripts/smoke_test.py <binary>` starts a build headless, without settings or credentials, and
+checks that it doesn't crash.
 
 Platform notes:
 
@@ -232,11 +264,17 @@ Platform notes:
 - **Upload:** the default payment method (otherwise the first one), and the **Enable uploads** switch.
 - **Font size:** 0.5×–2.0×, applied immediately.
 
-Non-secret settings are stored in `~/.config/wint-receipts/config.json`, on every platform for now
-(on Windows that's `%USERPROFILE%\.config\wint-receipts`). Categories and payment methods are cached in
-`~/.cache/wint-receipts/reference.json`. `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` move them. Both logs are
-written to the folder the app is started from, unless you change the path in Settings. If you start a
-binary by double-clicking it, set the log paths explicitly.
+Where the app keeps its files (`XDG_CONFIG_HOME` / `XDG_CACHE_HOME` override this on any platform):
+
+| | Settings (`config.json`) | Cache (`reference.json`: categories, payment methods) |
+|---|---|---|
+| Linux | `~/.config/wint-receipts/` | `~/.cache/wint-receipts/` |
+| macOS | `~/Library/Application Support/wint-receipts/` | `~/Library/Caches/wint-receipts/` |
+| Windows | `%APPDATA%\wint-receipts\` | `%LOCALAPPDATA%\wint-receipts\cache\` |
+
+By default, both logs are written to the folder the app is started from. The exception is the
+packaged app on Windows and macOS, which is usually started by double-clicking: it writes them to a
+`logs` folder inside its settings folder. You can change both paths in Settings.
 
 ## Wint API
 
