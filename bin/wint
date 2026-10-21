@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Call the Wint API and append one JSON line per request to ./wint-requests.log.
+#
+# Usage: bin/wint [-X METHOD] [-o OUTFILE] [-n NOTE] PATH_OR_URL
+#   bin/wint /api/Receipt/3021770
+#   bin/wint -o receipt.json -n "report for receipt" /api/Receipt/3021770
+#
+# Only GET is allowed unless WINT_ALLOW_WRITE=1 is set (writes need explicit approval).
+# Credentials come from ./.CREDENTIALS (WINT_USER, WINT_TOKEN) and are never logged.
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+log="$root/wint-requests.log"
+method=GET out="" note=""
+
+while getopts "X:o:n:" opt; do
+  case "$opt" in
+    X) method="${OPTARG^^}" ;;
+    o) out="$OPTARG" ;;
+    n) note="$OPTARG" ;;
+    *) exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
+[[ $# -eq 1 ]] || { echo "usage: $0 [-X METHOD] [-o OUTFILE] [-n NOTE] PATH_OR_URL" >&2; exit 2; }
+
+url="$1"
+[[ "$url" == http* ]] || url="https://api.wint.se${url}"
+
+if [[ "$method" != GET && "${WINT_ALLOW_WRITE:-}" != 1 ]]; then
+  echo "refusing $method: only GET is allowed without WINT_ALLOW_WRITE=1" >&2
+  jq -cn --arg ts "$(date -u +%FT%T.%3NZ)" --arg m "$method" --arg u "$url" --arg n "$note" \
+    '{ts:$ts, method:$m, url:$u, status:null, result:"refused (write not allowed)", note:$n}' >> "$log"
+  exit 3
+fi
+
+# shellcheck disable=SC1091
+. "$root/.CREDENTIALS"
+
+body="$(mktemp)"
+trap 'rm -f "$body"' EXIT
+ts="$(date -u +%FT%T.%3NZ)"
+set +e
+meta="$(curl -sS -m 60 -X "$method" -u "$WINT_USER:$WINT_TOKEN" \
+  -H 'Accept: application/json' \
+  -H 'X-Wint-Capabilities: ReceiptPaymentMethodNullability' \
+  -o "$body" -w '%{http_code} %{size_download} %{time_total} %{header.x-rate-limit-remaining}' "$url" 2>&1)"
+rc=$?
+set -e
+
+if [[ $rc -ne 0 ]]; then
+  jq -cn --arg ts "$ts" --arg m "$method" --arg u "$url" --arg e "$meta" --arg n "$note" \
+    '{ts:$ts, method:$m, url:$u, status:null, result:("curl error: "+$e), note:$n}' >> "$log"
+  echo "$meta" >&2
+  exit $rc
+fi
+
+read -r status bytes secs remaining <<< "$meta"
+case "$status" in
+  2??) result=ok ;;
+  *) result="error: $(head -c 300 "$body" | tr '\n' ' ')" ;;
+esac
+jq -cn --arg ts "$ts" --arg m "$method" --arg u "$url" --argjson s "$status" --argjson b "$bytes" \
+  --argjson t "$secs" --arg rl "$remaining" --arg r "$result" --arg o "$out" --arg n "$note" \
+  '{ts:$ts, method:$m, url:$u, status:$s, bytes:$b, seconds:$t,
+    rate_limit_remaining:($rl|tonumber? // null), result:$r, saved_to:(if $o == "" then null else $o end), note:$n}' >> "$log"
+
+if [[ -n "$out" ]]; then cp "$body" "$out"; else cat "$body"; fi
+[[ "$status" == 2?? ]]
