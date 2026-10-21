@@ -1,9 +1,12 @@
-"""Start a built binary headless and check it keeps running (no import errors, no crash at startup).
+"""Start a built binary headless and check that the full UI comes up and the app exits cleanly.
 
     python scripts/smoke_test.py dist/wint-receipts[.exe | .app]
 
-Runs offscreen with an empty, temporary config/cache and no Wint credentials, so it makes no
-network calls and doesn't touch the user's settings. Exit 0 = still running after the wait.
+The app runs offscreen with an empty, temporary config and cache and no Wint credentials, so it
+makes no network calls and doesn't touch the user's settings. With WINT_RECEIPTS_SMOKE_TEST set, the
+app quits by itself a few seconds after its window is shown. The test passes only if it exits with
+code 0 within the time limit. A crash, a traceback, a hang, or a windowed build's error dialog (which
+keeps the process alive) all fail.
 """
 from __future__ import annotations
 
@@ -11,10 +14,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
-WAIT_SECONDS = 15
+TIME_LIMIT_SECONDS = 90  # a one-file build unpacks itself first; that can take a while on CI
 
 
 def executable(path: Path) -> Path:
@@ -30,29 +32,23 @@ def main() -> int:
     exe = executable(Path(sys.argv[1]).resolve())
     with tempfile.TemporaryDirectory() as tmp:
         env = {k: v for k, v in os.environ.items() if k not in ("WINT_USER", "WINT_TOKEN")}
-        env.update(QT_QPA_PLATFORM="offscreen", XDG_CONFIG_HOME=f"{tmp}/config", XDG_CACHE_HOME=f"{tmp}/cache")
-        proc = subprocess.Popen([str(exe)], cwd=tmp, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        deadline = time.monotonic() + WAIT_SECONDS
-        while time.monotonic() < deadline and proc.poll() is None:
-            time.sleep(0.5)
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                out, _ = proc.communicate(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                out, _ = proc.communicate()
-            text = out.decode(errors="replace")
-            if "Traceback (most recent call last)" in text:
-                print(text)
-                print("smoke test: started, but printed a traceback")
-                return 1
-            print(f"smoke test: {exe.name} ran for {WAIT_SECONDS}s without crashing")
-            return 0
-        out, _ = proc.communicate()
-        print(out.decode(errors="replace"))
-        print(f"smoke test: {exe.name} exited early with code {proc.returncode}")
+        env.update(QT_QPA_PLATFORM="offscreen", WINT_RECEIPTS_SMOKE_TEST="1",
+                   XDG_CONFIG_HOME=os.path.join(tmp, "config"), XDG_CACHE_HOME=os.path.join(tmp, "cache"))
+        try:
+            # communicate() drains the output while waiting, so a chatty app can't block on a full pipe.
+            proc = subprocess.run([str(exe)], cwd=tmp, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  timeout=TIME_LIMIT_SECONDS)
+        except subprocess.TimeoutExpired as e:
+            print((e.stdout or b"").decode(errors="replace"))
+            print(f"smoke test: {exe.name} did not exit within {TIME_LIMIT_SECONDS}s (hang or error dialog)")
+            return 1
+    out = proc.stdout.decode(errors="replace")
+    if proc.returncode != 0 or "Traceback (most recent call last)" in out:
+        print(out)
+        print(f"smoke test: {exe.name} failed (exit code {proc.returncode})")
         return 1
+    print(f"smoke test: {exe.name} started its UI and exited cleanly")
+    return 0
 
 
 if __name__ == "__main__":
