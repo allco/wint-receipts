@@ -1,4 +1,4 @@
-# Wint receipts
+# Wint receipts — scan, check, upload
 
 A desktop app (Python + Qt) that turns a PDF of scanned receipts (one receipt per page) into
 receipts in [Wint](https://wint.se):
