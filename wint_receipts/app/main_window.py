@@ -27,7 +27,7 @@ from .workers import Job
 
 STATUS_COLORS = theme.STATUS
 STATUS_LABELS = {
-    PageStatus.NEW: "waiting", PageStatus.RECOGNIZING: "recognising", PageStatus.NEEDS_REVIEW: "needs review",
+    PageStatus.NEW: "waiting", PageStatus.RECOGNIZING: "AI reading", PageStatus.NEEDS_REVIEW: "needs review",
     PageStatus.APPROVED: "approved", PageStatus.SKIPPED: "skipped", PageStatus.UPLOADING: "uploading",
     PageStatus.UPLOADED: "uploaded", PageStatus.FAILED: "failed",
 }
@@ -136,8 +136,8 @@ class MainWindow(QMainWindow):
             es.RECEIPTS_SVG, "Open a PDF of scanned receipts",
             "Drag a PDF onto this window, or click <b>Open PDF</b>. Each page should hold one receipt.",
             width_em=16)
-        for lead, text in (("1 · Open", "Claude reads every page: date, amount, VAT, supplier, category."),
-                           ("2 · Review", "check each page against the scan, fix what's marked, approve."),
+        for lead, text in (("1 · Open", "Claude AI reads every page: date, amount, VAT, supplier, category."),
+                           ("2 · Review", "check the AI's reading against the scan, fix what's marked, approve."),
                            ("3 · Upload", "each approved receipt goes to Wint with only its own page.")):
             self.image_empty.add_row(text, lead=lead)
         self.image_empty.add_button("Open PDF…", self._open_dialog, primary=True,
@@ -145,15 +145,15 @@ class MainWindow(QMainWindow):
         self.image_empty.finish_buttons()
         self.form_empty = es.EmptyState(
             es.FORM_SVG, "Receipt details",
-            "The fields Claude read from the selected page appear here, ready to check.<br><br>"
-            f"<span style='color:{theme.WARNING_TEXT}'>Amber</span>: Claude wasn't sure, compare with the scan.<br>"
+            "The fields Claude AI read from the selected page appear here, ready to check.<br><br>"
+            f"<span style='color:{theme.WARNING_TEXT}'>Amber</span>: the AI wasn't sure, compare with the scan.<br>"
             f"<span style='color:{theme.ERROR_TEXT}'>Red</span>: must be fixed before approving.<br><br>"
             "<b>Ctrl+Enter</b> approve &nbsp;·&nbsp; <b>PgUp/PgDn</b> previous/next page<br>"
             "Scroll on the image to zoom, double-click to fit.",
             width_em=10)
         self.form_waiting = es.EmptyState(es.READING_SVG, "", "", width_em=10)
         self._waiting_buttons = [
-            self.form_waiting.add_button("Recognise this page", lambda: self._recognize([self._current_index()], force=True),
+            self.form_waiting.add_button("Read with AI", lambda: self._recognize([self._current_index()], force=True),
                                          primary=True),
             self.form_waiting.add_button("Skip page", self._toggle_skip),
         ]
@@ -169,14 +169,14 @@ class MainWindow(QMainWindow):
             self.form_stack.setCurrentIndex(0)
         elif p.draft is None:
             if p.status is PageStatus.RECOGNIZING:
-                self.form_waiting.set_text("Claude is reading this receipt…",
+                self.form_waiting.set_text("Claude AI is reading this receipt…",
                                            "Usually a few seconds per page. You can review other pages meanwhile.")
             elif p.status is PageStatus.FAILED:
-                self.form_waiting.set_text("Recognition failed", f"{p.error or 'Unknown error'}<br><br>Try again, or skip the page.")
+                self.form_waiting.set_text("AI reading failed", f"{p.error or 'Unknown error'}<br><br>Try again, or skip the page.")
             elif p.status is PageStatus.SKIPPED:
-                self.form_waiting.set_text("Page skipped", "Recognise it if it does hold a receipt.")
+                self.form_waiting.set_text("Page skipped", "Read it with AI if it does hold a receipt.")
             else:
-                self.form_waiting.set_text("Not recognised yet", "Recognise this page to fill in the receipt fields.")
+                self.form_waiting.set_text("Not read yet", "Let the AI read this page to fill in the receipt fields.")
             busy = p.status is PageStatus.RECOGNIZING
             for b in self._waiting_buttons:
                 b.setVisible(not busy)
@@ -215,7 +215,7 @@ class MainWindow(QMainWindow):
         self._fit_icons()
         self.addToolBar(tb)
         icons = {
-            "Open PDF…": "open", "Recognise all": "recognise", "Previous": "previous", "Next": "next",
+            "Open PDF…": "open", "Read with AI": "recognise", "Previous": "previous", "Next": "next",
             "Fit image": "fit", "Preview request": "preview", "Upload approved": "upload",
             "Reload Wint data": "reload", "Settings…": "settings",
         }
@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
             return a
 
         act("Open PDF…", self._open_dialog, QKeySequence.StandardKey.Open)
-        self.recognize_act = act("Recognise all", lambda: self._recognize(None), tip="Recognise every page not recognised yet")
+        self.recognize_act = act("Read with AI", lambda: self._recognize(None), tip="Let Claude AI read every page that hasn't been read yet")
         tb.addSeparator()
         act("Previous", lambda: self._step(-1), "PgUp")
         act("Next", lambda: self._step(1), "PgDown")
@@ -883,7 +883,7 @@ class MainWindow(QMainWindow):
             parts.append(", ".join(f"{n} {STATUS_LABELS[s]}" for s, n in counts.items()))
             cost = sum(p.recognition_cost_usd or 0 for p in self.session.pages)
             if cost:
-                parts.append(f"recognition ${cost:.2f}")
+                parts.append(f"AI cost ${cost:.2f}")
         parts.append("uploads ON" if self.settings.uploads_enabled else "uploads off")
         deleted = sum(p.deleted for p in self.session.pages) if self.session else 0
         self.restore_btn.setText(f"Restore deleted pages ({deleted})")

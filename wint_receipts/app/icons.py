@@ -17,9 +17,10 @@ SVGS = {
     # folder with a receipt sticking out
     "open": '<path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 18v-8a1.5 1.5 0 0 0-1.5-1.5h-7L10.5 6h-6A1.5 1.5 0 0 0 3 7.5z"/>'
             '<path d="M8 12.5h8M8 15.5h5" stroke="{accent}"/>',
-    # receipt under a magnifier
-    "recognise": '<path d="M5 3.5h10v17l-1.7-1-1.6 1-1.7-1-1.6 1-1.7-1L5 20.5z"/><path d="M8 8h4M8 11h3"/>'
-                 '<circle cx="16" cy="14" r="3.2" stroke="{accent}"/><path d="M18.4 16.4L21 19" stroke="{accent}"/>',
+    # receipt with AI sparkles
+    "recognise": '<path d="M3.5 3.5h9v17l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1z"/><path d="M6.5 8h3M6.5 11h3M6.5 14h2"/>'
+                 '<path d="M17.5 8.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3-3.3-1.2 3.3-1.2z" fill="{accent}" stroke="{accent}" stroke-width="1"/>'
+                 '<path d="M19.5 3l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="{accent}" stroke="{accent}" stroke-width="0.8"/>',
     "previous": '<path d="M14.5 6l-6 6 6 6"/>',
     "next": '<path d="M9.5 6l6 6-6 6"/>',
     # corners pointing outward around a page

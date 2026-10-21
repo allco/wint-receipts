@@ -75,7 +75,7 @@ def check(
 
     if recognition:
         for f in recognition.uncertain_fields:
-            warn(f, f"Claude was not sure about the {f.replace('_', ' ')} — check it against the image")
+            warn(f, f"The AI wasn't sure about the {f.replace('_', ' ')} — check it against the image")
 
     return issues
 

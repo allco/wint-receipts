@@ -4,12 +4,13 @@ from __future__ import annotations
 import html
 from datetime import date
 
-from PySide6.QtCore import QEvent, Signal
+from PySide6.QtCore import QEvent, QSize, Signal
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QGridLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from ..core.checks import Issue, Level
+from . import icons as app_icons
 from . import theme
 from ..core.models import PageState, PageStatus, ReceiptDraft, ReferenceData
 
@@ -78,16 +79,18 @@ class ReceiptForm(QWidget):
         form.addRow("Comment", self.comment)
         form.addRow("Category", self.category)
         form.addRow("Payment method", self.payment)
-        form.addRow("VAT (read)", self.vat)
+        form.addRow("VAT (AI-read)", self.vat)
         form.addRow("Attached pages", self.pages)
-        form.addRow("Claude's notes", self.notes)
+        form.addRow("AI notes", self.notes)
 
         self.approve_btn = QPushButton("Approve  (Ctrl+Enter)")
         self.approve_btn.setObjectName("primary")
         self.approve_btn.clicked.connect(self.approve_requested)
         self.skip_btn = QPushButton("Skip page")
         self.skip_btn.clicked.connect(self.skip_requested)
-        self.rerec_btn = QPushButton("Recognise again")
+        self.rerec_btn = QPushButton("Read again with AI")
+        self.rerec_btn.setIcon(app_icons.icon("recognise"))
+        self._update_title_font()
         self.rerec_btn.clicked.connect(self.rerecognize_requested)
         self.attach_btn = QPushButton("Attach to previous")
         self.attach_btn.setToolTip("This page continues the receipt on the previous page")
@@ -115,6 +118,9 @@ class ReceiptForm(QWidget):
         f.setBold(True)
         f.setPointSizeF(f.pointSizeF() * 1.15)
         self.title.setFont(f)
+        if hasattr(self, "rerec_btn"):  # button icons follow the font size
+            h = self.fontMetrics().height()
+            self.rerec_btn.setIconSize(QSize(h, h))
 
     def changeEvent(self, event):  # noqa: N802 - Qt API
         if event.type() == QEvent.Type.FontChange:  # app font scaled from Settings

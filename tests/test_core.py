@@ -132,7 +132,7 @@ def test_checks_warnings():
     issues = checks.check(d, REF, rec, today=date(2026, 10, 21))
     assert not checks.blocking(issues)
     msgs = " ".join(i.message for i in issues)
-    assert "locked period" in msgs and "Unusual VAT rate" in msgs and "not sure" in msgs
+    assert "locked period" in msgs and "Unusual VAT rate" in msgs and "wasn't sure" in msgs
 
 
 def test_checks_vat_sum_mismatch():
