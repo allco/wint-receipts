@@ -152,6 +152,8 @@ disabled, they turn the border grey. They grow with the font size.
 - **Blank pages** never get a row; they count as deleted and can be restored.
 - **Editing** an approved receipt sends it back to *needs review*.
 - **Uploaded pages** are locked: they can't be edited, merged, rotated or deleted.
+- **Sideways scans are turned automatically.** The AI reports the clockwise turn a page needs; the
+  app applies it and says so in the AI notes. The rotate buttons override it.
 - **Corrections teach the AI.** Changing the AI's category or supplier name before approving adds a
   line to the AI learnings file. The next receipt from that supplier gets the corrected values, and
   the AI notes say so.

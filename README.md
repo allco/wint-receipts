@@ -32,6 +32,9 @@ What it does beyond reading the text:
   are returned as *uncertain fields*. The app marks those amber, so you know exactly where to look.
 - **Knows what it's looking at.** It recognises blank pages (left out of the list), receipt backs
   (skipped), and pages that continue the receipt before them (the app suggests merging).
+- **Turns sideways scans upright.** It reports how a page must be turned to read normally, and the
+  app turns the page: on screen, and in the PDF page sent to Wint. The *Rotate* buttons still let you
+  correct it.
 - **Gets checked by the app.** Net + VAT must add up to the total, VAT rates should be Swedish ones,
   dates can't be in the future or in a locked period. Anything off is flagged before you approve.
 - **Learns from your corrections.** If you change the category or the supplier name the AI read,
@@ -68,7 +71,8 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - A receipt that runs over two pages can be merged with **Attach to previous**.
    - Blank pages are left out of the list (*Restore deleted pages* brings them back if Claude was
      wrong). Receipt backs are shown but skipped.
-   - Rotated scans: turn the page with **Rotate left / right** under the image (Ctrl+Shift+R /
+   - Rotated scans are turned upright automatically when the AI reads them. To turn one yourself, use
+     **Rotate left / right** under the image (Ctrl+Shift+R /
      Ctrl+R). The turn is used for the AI reading and for the PDF page sent to Wint. Zoom with − / +,
      1:1 and Fit, or the mouse wheel.
    - The amount is shown in **bold**; it's the number to check first.
