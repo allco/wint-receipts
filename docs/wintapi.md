@@ -122,6 +122,12 @@ repeat the key: `States=Booked&States=Paid`.
 first. Despite the summary, it is not limited to the last six months. Persons copied onto a receipt get
 a new `Id` each time, so match people across receipts by `Name`, not `Id`.
 
+**Representation participants go in `Persons`** (`ReceiptPost.Persons`, "People the receipt concerns",
+items `{Id, Name, Company}`). Verified from history: 497 of 500 receipts in the Representation and
+Personalrepresentation categories had their participants there. The account holder usually appears
+too, but isn't in the address book, so Wint may add them itself. Creating receipts with `Persons` hasn't
+been tested yet.
+
 ### Create / update return ids
 
 `POST` (create) and `PUT /{id}` (update) usually return the entity id as a bare `integer`
