@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -20,6 +20,12 @@ from .models import ME_ID, Category, PaymentMethod, Person, ReceiptDraft, Refere
 
 COMMON_CATEGORIES = 6
 CAPABILITIES = {"X-Wint-Capabilities": "ReceiptPaymentMethodNullability"}
+
+
+class Attachment(NamedTuple):
+    file_name: str
+    content_type: str
+    data: bytes
 
 
 class WintError(RuntimeError):
@@ -161,8 +167,8 @@ class WintClient:
 
     # ---- writes (UNTESTED against the live API — see docs/wintapi.md)
 
-    def create_receipt(self, draft: ReceiptDraft, attachment_pdf: bytes, client_id: str, file_name: str) -> int:
-        body = receipt_post_body(draft, attachment_pdf, client_id, file_name)
+    def create_receipt(self, draft: ReceiptDraft, attachments: list[Attachment], client_id: str) -> int:
+        body = receipt_post_body(draft, attachments, client_id)
         resp = self.request("POST", "/api/Receipt", json_body=body, note=f"create receipt client_id={client_id}")
         return int(resp.json())
 
@@ -191,7 +197,7 @@ def _enum_int(v: Any) -> int | None:
     return v if isinstance(v, int) else None
 
 
-def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str, file_name: str) -> dict:
+def receipt_post_body(draft: ReceiptDraft, attachments: list[Attachment], client_id: str) -> dict:
     """ReceiptPost JSON. Field names are PascalCase as in the v1 spec."""
     if draft.date is None or draft.amount is None:
         raise ValueError("date and amount are required")
@@ -203,12 +209,9 @@ def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str
         "ReceiptCategoryId": draft.category_id,
         "PaymentMethodId": draft.payment_method_id,
         "Dimensions": [],
-        # Participants (representation): ReceiptPost.Persons, "People the receipt concerns"; untested on create.
+        # Participants (representation): ReceiptPost.Persons; the account holder goes with Id 0.
         "Persons": [{"Id": p.id, "Name": p.name, "Company": p.company} for p in draft.persons],
         "Intent": draft.intent or None,
-        "Attachments": [{
-            "FileName": file_name,
-            "ContentType": "application/pdf",
-            "Data": base64.b64encode(attachment_pdf).decode("ascii"),
-        }],
+        "Attachments": [{"FileName": a.file_name, "ContentType": a.content_type,
+                         "Data": base64.b64encode(a.data).decode("ascii")} for a in attachments],
     }

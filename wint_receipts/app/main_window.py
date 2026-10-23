@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from ..core import checks, config, pdf, reclog, recognize, upload
 from ..core.learnings import Learnings
+from ..core.ledger import Ledger
 from ..core.config import Settings
 from ..core.models import ME_ID, PageKind, PageState, PageStatus, ReceiptDraft, ReferenceData, Session
 from ..core.session import open_session, save_session
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         self._display_cache: dict[tuple[int, int], bytes] = {}  # (page, rotation) → PNG
         self._jobs: set[Job] = set()  # keep Python refs until the signals fire
         self._upload_queue: list[int] = []
+        self._allow_similar: set[str] = set()  # client ids the user chose to upload despite a similar receipt
         self._reference_loading = False
         self._recognize_after_reference = False  # a PDF was opened before the categories arrived
         self.pool = QThreadPool(self)
@@ -379,6 +381,7 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Open PDF", f"Could not open {path.name}: {e}")
             return
+        self._restore_uploads(session)
         self.session = session
         self._display_cache.clear()
         self._rendering.clear()
@@ -562,6 +565,13 @@ class MainWindow(QMainWindow):
         self._step(1)
 
     # ---- recognition
+
+    def _restore_uploads(self, session: Session) -> None:
+        """Pages uploaded before stay uploaded, even if the session file was lost or recreated."""
+        ledger = Ledger(config.ledger_path())
+        for p in session.pages:
+            if p.wint_receipt_id is None and (e := ledger.for_page(session.pdf_sha256, p.index)):
+                p.status, p.wint_receipt_id, p.client_id, p.deleted = PageStatus.UPLOADED, e.wint_receipt_id, e.client_id, False
 
     def _read_with_ai(self) -> None:
         """Toolbar action: read unread pages; when everything is read, offer to read pages again."""
@@ -895,14 +905,14 @@ class MainWindow(QMainWindow):
         if p is None or p.draft is None:
             return
         try:
-            data = pdf.extract_pages(Path(self.session.pdf_path), p.draft.pages or [p.index], self._rotations())
-            name = upload.attachment_name(Path(self.session.pdf_path), p.draft.pages or [p.index])
-            body = receipt_post_body(p.draft, data, p.client_id, name)
+            atts = upload.build_attachments(Path(self.session.pdf_path), p.draft.pages or [p.index], self._rotations(),
+                                            self.settings.attachment_format)
+            body = receipt_post_body(p.draft, atts, p.client_id)
         except ValueError as e:
             QMessageBox.information(self, "Preview request", str(e))
             return
-        att = body["Attachments"][0]
-        att["Data"] = f"<base64, {len(data):,} bytes of PDF>"
+        for a, b in zip(atts, body["Attachments"]):
+            b["Data"] = f"<base64, {len(a.data):,} bytes of {a.content_type}>"
         text = "POST /api/Receipt\n\n" + json.dumps(body, indent=2, ensure_ascii=False)
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Request for page {p.index + 1}")
@@ -964,15 +974,43 @@ class MainWindow(QMainWindow):
 
         def work():
             try:
-                return upload.upload_page(client, pdf_path, snapshot, rotations)
+                return upload.upload_page(client, pdf_path, snapshot, rotations,
+                                          allow_similar=snapshot.client_id in self._allow_similar,
+                                          fmt=self.settings.attachment_format)
+            except upload.DuplicateSuspected as e:
+                return ("duplicate", [r.get("Id") for r in e.receipts])
             finally:
                 client.close()
 
         self._run(Job(index, work), self._uploaded, self._upload_failed)
 
-    def _uploaded(self, index: int, receipt_id: int) -> None:
+    def _uploaded(self, index: int, receipt_id) -> None:
         p = self._page(index)
+        if isinstance(receipt_id, tuple):  # Wint already has a receipt with this date and amount
+            ids = ", ".join(f"#{i}" for i in receipt_id[1])
+            d = p.draft
+            if QMessageBox.question(
+                    self, "Possible duplicate",
+                    f"Wint already has a receipt of {format_amount(d.amount)} {d.currency} on {d.date} ({ids}).\n\n"
+                    f"Upload page {index + 1} anyway?") == QMessageBox.StandardButton.Yes:
+                self._allow_similar.add(p.client_id)
+                p.status = PageStatus.APPROVED
+                self._upload_queue.insert(0, index)
+            else:
+                p.status, p.error = PageStatus.APPROVED, f"Not uploaded: Wint already has {ids}"
+            self._after_page_change(index)
+            self._upload_next()
+            return
         if p:
+            try:
+                Ledger(config.ledger_path()).add(
+                    pdf_sha256=self.session.pdf_sha256, pdf=self.session.pdf_path, page=index, client_id=p.client_id,
+                    wint_receipt_id=receipt_id, date=p.draft.date.isoformat() if p.draft and p.draft.date else None,
+                    amount=p.draft.amount if p.draft else None, currency=p.draft.currency if p.draft else "",
+                    supplier=p.draft.supplier_name if p.draft else "",
+                    org=(p.recognition.supplier_org_number or "") if p.recognition else "")
+            except OSError as e:
+                QMessageBox.warning(self, "Upload", f"Uploaded, but the upload ledger couldn't be written: {e}")
             p.status = PageStatus.UPLOADED
             p.wint_receipt_id = receipt_id
             p.error = None

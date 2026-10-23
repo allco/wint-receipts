@@ -116,6 +116,11 @@ class SettingsDialog(QDialog):
         up_box = QGroupBox("Upload")
         uf = QFormLayout(up_box)
         uf.addRow("Default payment method", self.payment)
+        self.attach_fmt = QComboBox()
+        self.attach_fmt.addItem("JPEG image per page (recommended)", "jpeg")
+        self.attach_fmt.addItem("PDF page from the scan", "pdf")
+        self.attach_fmt.setCurrentIndex(max(self.attach_fmt.findData(settings.attachment_format), 0))
+        uf.addRow("Attachment", self.attach_fmt)
         uf.addRow("", self.uploads)
         uf.addRow("", warn)
 
@@ -215,6 +220,7 @@ class SettingsDialog(QDialog):
             "parallel_recognitions": self.parallel.value(),
             "default_payment_method_id": self.payment.currentData(),
             "uploads_enabled": self.uploads.isChecked(),
+            "attachment_format": self.attach_fmt.currentData(),
             "font_scale": self.font_scale.currentData(),
         })
 

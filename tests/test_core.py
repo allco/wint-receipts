@@ -12,7 +12,7 @@ from wint_receipts.core.config import Credentials, Settings
 from wint_receipts.core.models import (
     Category, PageKind, PageState, PageStatus, ReceiptDraft, Recognition, ReferenceData, VatLine,
 )
-from wint_receipts.core.wint import WintClient, WriteNotAllowed, receipt_post_body
+from wint_receipts.core.wint import Attachment, WintClient, WriteNotAllowed, receipt_post_body
 
 
 def page_widths(data: bytes) -> list[float]:
@@ -205,7 +205,7 @@ def test_get_is_logged_without_credentials(tmp_path):
 def test_writes_refused_by_default_and_logged(tmp_path):
     client, log = make_client(lambda req: pytest.fail("must not send"), tmp_path)
     with pytest.raises(WriteNotAllowed):
-        client.create_receipt(good_draft(), b"%PDF", "cid", "a.pdf")
+        client.create_receipt(good_draft(), [Attachment("a.jpg", "image/jpeg", b"JPG")], "cid")
     (entry,) = log_lines(log)
     assert entry["method"] == "POST" and entry["status"] is None and "refused" in entry["result"]
 
@@ -255,7 +255,7 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
 
 
 def test_receipt_post_body():
-    body = receipt_post_body(good_draft(supplier_name="EasyPark"), b"%PDF-1.7", "cid-1", "scans-p1.pdf")
+    body = receipt_post_body(good_draft(supplier_name="EasyPark"), [Attachment("scans-p1.pdf", "application/pdf", b"%PDF-1.7")], "cid-1")
     assert "SupplierName" not in body and "Comment" not in body  # neither is sent to Wint
     assert body["DateTime"] == "2026-10-20T00:00:00" and body["Amount"] == 44.85
     assert body["ReceiptCategoryId"] == 7 and body["PaymentMethodId"] == 1 and body["ClientId"] == "cid-1"
@@ -279,10 +279,17 @@ def test_upload_sends_only_its_pages(tmp_path, sample_pdf):
         return httpx.Response(200, json=555)
 
     client, _ = make_client(handler, tmp_path, allow_writes=True)
-    assert upload.upload_page(client, sample_pdf, approved_page(1, [1, 2])) == 555
+    assert upload.upload_page(client, sample_pdf, approved_page(1, [1, 2]), fmt="pdf") == 555
     att = sent["body"]["Attachments"][0]
     assert page_widths(base64.b64decode(att["Data"])) == [300, 400]
     assert att["FileName"] == "scans-p2-3.pdf"
+    from PIL import Image
+    assert upload.upload_page(client, sample_pdf, approved_page(1, [1, 2])) == 555  # default: JPEG per page
+    atts = sent["body"]["Attachments"]
+    assert [a["FileName"] for a in atts] == ["scans-p2.jpg", "scans-p3.jpg"]
+    assert all(a["ContentType"] == "image/jpeg" for a in atts)
+    sizes = [Image.open(io.BytesIO(base64.b64decode(a["Data"]))).size for a in atts]
+    assert sizes[0][0] / sizes[0][1] == pytest.approx(300 / 500, rel=0.02)
 
 
 def test_upload_is_idempotent_by_client_id(tmp_path, sample_pdf):
@@ -424,10 +431,14 @@ def test_upload_attaches_rotated_page(tmp_path, sample_pdf):
         return httpx.Response(200, json=7)
 
     client, _ = make_client(handler, tmp_path, allow_writes=True)
-    upload.upload_page(client, sample_pdf, approved_page(1), {1: 270})
+    upload.upload_page(client, sample_pdf, approved_page(1), {1: 270}, fmt="pdf")
     doc = pdfium.PdfDocument(io.BytesIO(base64.b64decode(sent["body"]["Attachments"][0]["Data"])))
     assert doc[0].get_rotation() == 270
     doc.close()
+    from PIL import Image
+    upload.upload_page(client, sample_pdf, approved_page(1), {1: 270})  # JPEG is rendered turned
+    w, h = Image.open(io.BytesIO(base64.b64decode(sent["body"]["Attachments"][0]["Data"]))).size
+    assert w > h  # 300×500 pt page turned a quarter → landscape
 
 
 def test_render_max_side_caps_long_edge(sample_pdf):
@@ -446,7 +457,7 @@ def test_representation_needs_people_and_sends_them():
         assert checks.blocking(issues) and any(i.field == "persons" and "at least 2" in i.message for i in issues)
     two = good_draft(category_id=8, persons=[cecilia, bo])
     assert not any(i.field == "persons" for i in checks.check(two, ref, today=date(2026, 10, 21)))
-    body = receipt_post_body(two, b"%PDF", "cid", "a.pdf")
+    body = receipt_post_body(two, [], "cid")
     assert body["Persons"] == [{"Id": 3, "Name": "Cecilia", "Company": "C AB"}, {"Id": 2, "Name": "Bo", "Company": ""}]
 
 
@@ -459,8 +470,8 @@ def test_representation_needs_reason_sent_as_intent():
     assert any(i.field == "intent" for i in checks.check(no_reason, ref, today=date(2026, 10, 21)))
     ok = good_draft(category_id=8, persons=people, intent="collaboration discussion")
     assert not checks.blocking(checks.check(ok, ref, today=date(2026, 10, 21)))
-    assert receipt_post_body(ok, b"%PDF", "cid", "a.pdf")["Intent"] == "collaboration discussion"
-    assert receipt_post_body(good_draft(), b"%PDF", "cid", "a.pdf")["Intent"] is None
+    assert receipt_post_body(ok, [], "cid")["Intent"] == "collaboration discussion"
+    assert receipt_post_body(good_draft(), [], "cid")["Intent"] is None
 
 
 def test_address_book_writes(tmp_path):
@@ -487,3 +498,30 @@ def test_address_book_writes_refused_without_permission(tmp_path):
         client.add_person("Ada", "")
     with pytest.raises(WriteNotAllowed):
         client.remove_person(1)
+
+
+def test_upload_stops_on_a_similar_receipt_in_wint(tmp_path, sample_pdf):
+    def handler(req):
+        if req.method == "GET" and "ClientId" in str(req.url):
+            return httpx.Response(200, json={"Items": []})
+        if req.method == "GET":
+            return httpx.Response(200, json={"Items": [{"Id": 77, "DateTime": "2026-10-20T00:00:00", "Amount": 44.85}]})
+        return httpx.Response(200, json=901)
+
+    client, _ = make_client(handler, tmp_path, allow_writes=True)
+    with pytest.raises(upload.DuplicateSuspected) as e:
+        upload.upload_page(client, sample_pdf, approved_page(1))
+    assert e.value.receipts[0]["Id"] == 77
+    assert upload.upload_page(client, sample_pdf, approved_page(1), allow_similar=True) == 901
+
+
+def test_ledger_records_and_finds_uploads(tmp_path):
+    from wint_receipts.core.ledger import Ledger
+    lg = Ledger(tmp_path / "uploads.jsonl")
+    assert lg.entries() == [] and lg.for_page("abc", 0) is None
+    lg.add(pdf_sha256="abc", pdf="/x.pdf", page=0, client_id="c1", wint_receipt_id=10, date="2026-10-18",
+           amount=660.0, currency="SEK", supplier="Mr Wok", org="556979-1303")
+    (tmp_path / "uploads.jsonl").open("a").write("not json\n")  # a damaged line doesn't hide the others
+    assert lg.for_page("abc", 0).wint_receipt_id == 10
+    assert [e.wint_receipt_id for e in lg.same_receipt("2026-10-18", 660.0)] == [10]
+    assert lg.same_receipt("2026-10-18", 660.0, exclude_client_id="c1") == []

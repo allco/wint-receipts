@@ -665,3 +665,19 @@ def test_most_used_categories_on_top_with_a_divider(window):
     items = [combo.itemText(i) for i in range(combo.count())]
     assert items == ["— choose —", "Gamma", "Alpha", "", "Beta"]  # "" is the divider
     assert combo.findData(2) == 4
+
+
+def test_uploaded_pages_restored_from_ledger(qtbot, monkeypatch, sample_pdf):
+    from wint_receipts.core import config
+    from wint_receipts.core.ledger import Ledger
+    sess = mw.open_session(sample_pdf)  # a fresh session, as if the old file was deleted
+    Ledger(config.ledger_path()).add(pdf_sha256=sess.pdf_sha256, pdf=str(sample_pdf), page=1, client_id="cid-x",
+                                     wint_receipt_id=3026953, date="2026-10-18", amount=660.0, currency="SEK")
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    monkeypatch.setattr(mw.MainWindow, "_recognize", lambda self, indices, force=False: None)
+    w = mw.MainWindow(Settings())
+    qtbot.addWidget(w)
+    w.open_pdf(sample_pdf)
+    p = w.session.pages[1]
+    assert p.status is PageStatus.UPLOADED and p.wint_receipt_id == 3026953 and p.client_id == "cid-x"
+    assert w.session.pages[0].status is PageStatus.NEW

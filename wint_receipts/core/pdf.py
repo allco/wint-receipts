@@ -54,6 +54,24 @@ def render_png(path: Path, index: int, dpi: int = 200, rotation: int = 0, max_si
     return buf.getvalue()
 
 
+def render_jpeg(path: Path, index: int, rotation: int = 0, max_side: int = 2400, quality: int = 85) -> bytes:
+    """One page as a JPEG, the format Wint's own app uploads; much smaller than the scan's PDF page."""
+    with _lock:
+        pdf = pdfium.PdfDocument(path)
+        try:
+            page = pdf[index]
+            try:
+                scale = min(300 / 72, max_side / max(page.get_width(), page.get_height()))
+                image = page.render(scale=scale, rotation=rotation % 360).to_pil().convert("RGB")
+            finally:
+                page.close()
+        finally:
+            pdf.close()
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+
 def extract_pages(path: Path, indices: Sequence[int], rotations: Mapping[int, int] | None = None) -> bytes:
     """Copy the given pages (0-based, in order) into a new PDF, without re-encoding them.
 
