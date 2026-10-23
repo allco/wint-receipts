@@ -60,6 +60,8 @@ class MainWindow(QMainWindow):
         self._display_cache: dict[tuple[int, int], bytes] = {}  # (page, rotation) → PNG
         self._jobs: set[Job] = set()  # keep Python refs until the signals fire
         self._upload_queue: list[int] = []
+        self._upload_total = self._upload_done = 0
+        self._upload_cancelled = False
         self._allow_similar: set[str] = set()  # client ids the user chose to upload despite a similar receipt
         self._reference_loading = False
         self._recognize_after_reference = False  # a PDF was opened before the categories arrived
@@ -139,6 +141,24 @@ class MainWindow(QMainWindow):
             busy.addWidget(w)
         self.ai_busy.hide()
         self.statusBar().addPermanentWidget(self.ai_busy)
+        self.upload_busy = QWidget()
+        up = QHBoxLayout(self.upload_busy)
+        up.setContentsMargins(0, 0, 8, 0)
+        self.upload_busy_icon = QLabel()
+        self.upload_busy_icon.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.upload_busy_bar = QProgressBar()
+        self.upload_busy_bar.setTextVisible(False)
+        self.upload_busy_bar.setFixedWidth(self.fontMetrics().averageCharWidth() * 12)
+        self.upload_busy_bar.setMaximumHeight(self.fontMetrics().height() // 2 + 2)
+        self.upload_busy_label = QLabel()
+        self.upload_cancel_btn = QPushButton("Cancel")
+        self.upload_cancel_btn.setFlat(True)
+        self.upload_cancel_btn.setObjectName("link")
+        self.upload_cancel_btn.clicked.connect(self._cancel_uploads)
+        for w in (self.upload_busy_icon, self.upload_busy_bar, self.upload_busy_label, self.upload_cancel_btn):
+            up.addWidget(w)
+        self.upload_busy.hide()
+        self.statusBar().addPermanentWidget(self.upload_busy)
         self.status_label = QLabel()
         self.statusBar().addPermanentWidget(self.status_label)
         self._update_status()
@@ -1020,21 +1040,52 @@ class MainWindow(QMainWindow):
                                 "This writes to your real bookkeeping.") != QMessageBox.StandardButton.Yes:
             return
         self._upload_queue = [p.index for p in pages]
+        self._upload_total, self._upload_done, self._upload_cancelled = len(pages), 0, False
         self.upload_act.setEnabled(False)
         self._upload_next()
 
+    def _cancel_uploads(self) -> None:
+        if not self._upload_queue:
+            return
+        self._upload_cancelled = True
+        self._upload_queue.clear()
+        self.upload_cancel_btn.setEnabled(False)
+        self.upload_busy_label.setText("Cancelling — finishing the receipt being sent…")
+
+    def _show_upload_progress(self, index: int | None) -> None:
+        if index is None:
+            self.upload_busy.hide()
+            return
+        h = self.fontMetrics().height()
+        self.upload_busy_icon.setPixmap(app_icons.icon("upload").pixmap(QSize(h, h), self.devicePixelRatioF()))
+        self.upload_busy_icon.setFixedSize(h, h)
+        self.upload_busy_bar.setRange(0, self._upload_total)
+        self.upload_busy_bar.setValue(self._upload_done)
+        self.upload_busy_label.setText(
+            f"Uploading {self._upload_done + 1} of {self._upload_total} · page {index + 1}…")
+        self.upload_cancel_btn.setEnabled(True)
+        self.upload_busy.show()
+
     def _upload_next(self) -> None:
         if not self._upload_queue:
+            self._show_upload_progress(None)
             self.upload_act.setEnabled(True)
-            self.statusBar().showMessage("Upload finished", 8000)
+            if self._upload_cancelled:
+                left = self._upload_total - self._upload_done
+                self.statusBar().showMessage(
+                    f"Upload cancelled: {self._upload_done} uploaded, {left} not sent", 8000)
+            else:
+                self.statusBar().showMessage(f"Upload finished: {self._upload_done} uploaded", 8000)
             return
         index = self._upload_queue.pop(0)
         p = self._page(index)
         client = self._client(allow_writes=True)
         if p is None or client is None:
             self._upload_queue.clear()
+            self._show_upload_progress(None)
             self.upload_act.setEnabled(True)
             return
+        self._show_upload_progress(index)
         snapshot = p.model_copy(deep=True)
         rotations = self._rotations()
         pdf_path = Path(self.session.pdf_path)
@@ -1065,9 +1116,11 @@ class MainWindow(QMainWindow):
                     f"Upload page {index + 1} anyway?") == QMessageBox.StandardButton.Yes:
                 self._allow_similar.add(p.client_id)
                 p.status = PageStatus.APPROVED
-                self._upload_queue.insert(0, index)
+                if not self._upload_cancelled:
+                    self._upload_queue.insert(0, index)
             else:
                 p.status, p.error = PageStatus.APPROVED, f"Not uploaded: Wint already has {ids}"
+                self._upload_total -= 1
             self._after_page_change(index)
             self._upload_next()
             return
@@ -1084,6 +1137,7 @@ class MainWindow(QMainWindow):
             p.status = PageStatus.UPLOADED
             p.wint_receipt_id = receipt_id
             p.error = None
+            self._upload_done += 1
             self._after_page_change(index)
             if p.draft:
                 for i in p.draft.pages:
@@ -1097,6 +1151,7 @@ class MainWindow(QMainWindow):
             p.error = f"Upload failed: {msg}"
             self._after_page_change(index)
         self._upload_queue.clear()
+        self._show_upload_progress(None)
         self.upload_act.setEnabled(True)
         QMessageBox.warning(self, "Upload", f"Page {index + 1} failed to upload; remaining uploads stopped.\n\n{msg}")
 

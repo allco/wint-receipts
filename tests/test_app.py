@@ -760,3 +760,36 @@ def test_multi_select_menu_acts_on_each_fitting_page(window, monkeypatch):
     assert all(p.deleted for p in s.pages)
     window._restore_all()
     assert not any(p.deleted for p in s.pages)
+
+
+def test_upload_progress_and_cancel(window, monkeypatch):
+    s = window.session
+    window._restore_all()
+    for p in s.pages:
+        p.status = PageStatus.APPROVED
+        p.draft = s.pages[0].draft.model_copy(update={"pages": [p.index]})
+    window.settings.uploads_enabled = True
+    started = []
+
+    class Client:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(mw.checks, "blocking", lambda issues: [])
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a: mw.QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(window, "_client", lambda allow_writes=False: Client())
+    monkeypatch.setattr(window, "_run", lambda job, ok, fail: started.append((job.tag, ok)))
+    window._upload_approved()
+    assert window.upload_busy.isVisibleTo(window)
+    assert window.upload_busy_label.text() == "Uploading 1 of 3 · page 1…"
+    index, ok = started[-1]
+    ok(index, 5001)
+    assert window.upload_busy_bar.value() == 1 and window.upload_busy_label.text() == "Uploading 2 of 3 · page 2…"
+    window._cancel_uploads()
+    assert "Cancelling" in window.upload_busy_label.text() and not window.upload_cancel_btn.isEnabled()
+    index, ok = started[-1]
+    ok(index, 5002)  # the receipt in flight still completes and is recorded
+    assert len(started) == 2 and not window.upload_busy.isVisibleTo(window)
+    assert [p.status for p in s.pages] == [PageStatus.UPLOADED, PageStatus.UPLOADED, PageStatus.APPROVED]
+    assert "1 not sent" in window.statusBar().currentMessage()
+    assert window.upload_act.isEnabled()
