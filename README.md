@@ -75,6 +75,9 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      1:1 and Fit, or the mouse wheel.
    - The form shows only what goes to Wint: date, amount (in **bold**), currency, category and payment
      method.
+   - **Representation** receipts get a **People** field: tick who took part, from the people you've
+     registered in Wint (loaded from Wint's receipt address book, most used first, with search).
+     Without anyone ticked, the receipt gets a warning.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
