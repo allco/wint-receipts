@@ -9,7 +9,12 @@ from .models import ReceiptDraft, Recognition, ReferenceData
 
 SWEDISH_VAT_RATES = {0.0, 6.0, 12.0, 25.0}
 TOLERANCE = 0.02
-REVIEWED_FIELDS = {"date", "total", "currency", "category_id", "vat"}  # AI fields shown on the form  # öre rounding
+REVIEWED_FIELDS = {"date", "total", "currency", "category_id", "vat"}  # AI fields shown on the form
+
+
+def is_representation(category_name: str | None) -> bool:
+    """Representation and Personalrepresentation receipts list the people who took part."""
+    return "representation" in (category_name or "").lower()  # öre rounding
 
 
 class Level(StrEnum):
@@ -57,6 +62,10 @@ def check(
         err("category", "Category is not chosen")
     elif reference and draft.category_id not in {c.id for c in reference.categories}:
         err("category", "Category is not one of the company's receipt categories")
+
+    category = next((c for c in (reference.categories if reference else []) if c.id == draft.category_id), None)
+    if category and is_representation(category.name) and not draft.persons:
+        warn("persons", "Representation: add the people who took part")
 
     if draft.payment_method_id is None:
         err("payment_method", "Payment method is not chosen")

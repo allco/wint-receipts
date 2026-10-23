@@ -18,6 +18,14 @@ class PageKind(StrEnum):
     NOT_A_RECEIPT = "not_a_receipt"
 
 
+class Person(BaseModel):
+    """Someone from the Wint receipt address book, e.g. a guest on a representation receipt."""
+
+    id: int
+    name: str
+    company: str = ""
+
+
 class VatLine(BaseModel):
     rate: float  # percent, e.g. 25
     net: float | None = None
@@ -63,6 +71,7 @@ class ReceiptDraft(BaseModel):
     category_id: int | None = None
     payment_method_id: int | None = None
     vat: list[VatLine] = Field(default_factory=list)
+    persons: list[Person] = Field(default_factory=list)  # who took part, for representation receipts
     # Pages of the source PDF attached to this receipt (0-based). Normally just the page itself;
     # continuation pages get merged into the receipt before them.
     pages: list[int] = Field(default_factory=list)
@@ -130,3 +139,6 @@ class ReferenceData(BaseModel):
     payment_methods: list[PaymentMethod]
     lock_date: date | None = None
     no_vat: bool = False
+    # The receipt address book: the most used people first (Wint's "common" list), then the rest by name.
+    persons: list[Person] = Field(default_factory=list)
+    common_person_ids: list[int] = Field(default_factory=list)

@@ -456,3 +456,31 @@ def test_page_image_renders_off_the_ui_thread(window, qtbot):
         mw.pdf.render_png = real
     assert threads and ui not in threads
     assert not window.image._item.pixmap().isNull()
+
+
+
+def test_people_row_only_for_representation_and_saved(window):
+    from wint_receipts.core.models import Person
+    from PySide6.QtCore import Qt
+    ref = REF.model_copy(update={
+        "categories": [Category(id=7, name="Parkering"), Category(id=8, name="Personalrepresentation")],
+        "persons": [Person(id=3, name="Cecilia"), Person(id=1, name="Anna", company="A AB")],
+        "common_person_ids": [3]})
+    window._reference_loaded("reference", ref)
+    window.page_list.setCurrentRow(0)
+    form = window.form
+    assert not form.people_row_visible()
+    form.category.setCurrentIndex(form.category.findData(8))
+    assert form.people_row_visible()
+    assert "Representation: add the people" in form.issues.text()
+    texts = [form.people.list.item(i).text() for i in range(form.people.list.count())]
+    assert texts == ["Most used", "Cecilia", "Everyone else", "Anna — A AB"]
+    form.people.search.setText("anna")
+    assert form.people.list.item(1).isHidden() and not form.people.list.item(3).isHidden()
+    form.people.list.item(3).setCheckState(Qt.CheckState.Checked)
+    p = window.session.pages[0]
+    assert [x.name for x in p.draft.persons] == ["Anna"]
+    assert "add the people" not in form.issues.text()
+    window.page_list.setCurrentRow(1)
+    window.page_list.setCurrentRow(0)  # coming back shows the saved selection
+    assert [x.name for x in form.people.selected()] == ["Anna"]

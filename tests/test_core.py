@@ -198,6 +198,11 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
         if req.url.path == "/api/Auth":
             return httpx.Response(200, json={"Id": 1, "Name": "Co", "ReceiptCategories": [{"Id": 7, "Name": "Parkering"}],
                                              "ReceiptPaymentMethods": {}, "LockDate": "2026-06-30T00:00:00"})
+        if req.url.path == "/api/Receipt/AllReceiptPersons":
+            return httpx.Response(200, json=[{"Id": 1, "Name": "Anna ", "Company": "A AB"},
+                                             {"Id": 2, "Name": "Bo", "Company": None}, {"Id": 3, "Name": "Cecilia"}])
+        if req.url.path == "/api/Receipt/CommonReceiptPersons":
+            return httpx.Response(200, json=[{"Id": 3, "Name": "Cecilia"}, {"Id": 2, "Name": "Bo"}])
         return httpx.Response(200, json={"Items": [
             {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2},
             {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2},
@@ -207,6 +212,8 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
     ref = client.reference_data()
     assert [m.id for m in ref.payment_methods] == [16978] and ref.payment_methods[0].type == 2
     assert ref.lock_date == date(2026, 6, 30) and ref.categories[0].name == "Parkering"
+    assert [p.name for p in ref.persons] == ["Cecilia", "Bo", "Anna"]  # most used first, in Wint's order
+    assert ref.common_person_ids == [3, 2] and ref.persons[2].company == "A AB"
 
 
 def test_receipt_post_body():
@@ -389,3 +396,15 @@ def test_render_max_side_caps_long_edge(sample_pdf):
     from PIL import Image
     im = Image.open(io.BytesIO(pdf.render_png(sample_pdf, 2, dpi=300, max_side=100)))  # page 3 is 400×500 pt
     assert max(im.size) == 100
+
+
+
+def test_representation_needs_people_and_sends_them():
+    from wint_receipts.core.models import Person
+    ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")]})
+    issues = checks.check(good_draft(category_id=8), ref, today=date(2026, 10, 21))
+    assert any(i.field == "persons" for i in issues) and not checks.blocking(issues)
+    with_people = good_draft(category_id=8, persons=[Person(id=3, name="Cecilia", company="C AB")])
+    assert not any(i.field == "persons" for i in checks.check(with_people, ref, today=date(2026, 10, 21)))
+    body = receipt_post_body(with_people, b"%PDF", "cid", "a.pdf")
+    assert body["Persons"] == [{"Id": 3, "Name": "Cecilia", "Company": "C AB"}]

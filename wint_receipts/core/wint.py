@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 
 from .config import Credentials
-from .models import Category, PaymentMethod, ReceiptDraft, ReferenceData
+from .models import Category, PaymentMethod, Person, ReceiptDraft, ReferenceData
 
 CAPABILITIES = {"X-Wint-Capabilities": "ReceiptPaymentMethodNullability"}
 
@@ -131,12 +131,21 @@ class WintClient:
             if mid and mid not in methods:
                 methods[mid] = PaymentMethod(id=mid, name=r.get("PaymentMethodName") or str(mid), type=_enum_int(r.get("PaymentMethodType")))
         lock = c.get("LockDate")
+        everyone = [_person(p) for p in self.get_json("/api/Receipt/AllReceiptPersons", note="load receipt persons") or []]
+        common = [_person(p) for p in self.get_json("/api/Receipt/CommonReceiptPersons", note="load common receipt persons") or []]
+        common_ids = [p.id for p in common]
+        known = {p.id for p in everyone}
+        everyone += [p for p in common if p.id not in known]
         return ReferenceData(
             company_id=c["Id"], company_name=c.get("Name") or "",
             categories=sorted(categories, key=lambda x: x.name.lower()),
             payment_methods=sorted(methods.values(), key=lambda x: x.name.lower()),
             lock_date=date.fromisoformat(lock[:10]) if lock else None,
             no_vat=bool(c.get("NoVat")),
+            persons=sorted(everyone, key=lambda p: (p.id not in common_ids,
+                                                    common_ids.index(p.id) if p.id in common_ids else 0,
+                                                    p.name.lower())),
+            common_person_ids=common_ids,
         )
 
     # ---- writes (UNTESTED against the live API — see docs/wintapi.md)
@@ -145,6 +154,10 @@ class WintClient:
         body = receipt_post_body(draft, attachment_pdf, client_id, file_name)
         resp = self.request("POST", "/api/Receipt", json_body=body, note=f"create receipt client_id={client_id}")
         return int(resp.json())
+
+
+def _person(p: dict) -> Person:
+    return Person(id=p["Id"], name=(p.get("Name") or "").strip(), company=(p.get("Company") or "").strip())
 
 
 def _enum_int(v: Any) -> int | None:
@@ -163,6 +176,8 @@ def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str
         "ReceiptCategoryId": draft.category_id,
         "PaymentMethodId": draft.payment_method_id,
         "Dimensions": [],
+        # People who took part (representation). Wint's ReceiptPerson shape; untested on create.
+        "Persons": [{"Id": p.id, "Name": p.name, "Company": p.company} for p in draft.persons],
         "Attachments": [{
             "FileName": file_name,
             "ContentType": "application/pdf",
