@@ -155,7 +155,8 @@ One receipt was created for real (`POST /api/Receipt` → `3026953`, 660 SEK Rep
 - **The response** is the new receipt id as a bare integer. A ~5.7 MB JSON body was accepted.
 - **State** right after creation is `0` (*Received*), so **no `Sign` call is needed**: like the receipts made
   in Wint's own app, it goes on to booking by itself.
-- **`Attachments`** with base64 `Data` works; `Images` isn't needed. Wint keeps the file as sent
+- **`Attachments`** with base64 `Data` works; `Images` isn't needed. A JPEG attachment
+  (`image/jpeg`, receipt 3027387) is stored and served back unchanged. Wint keeps the file as sent
   (downloaded back byte for byte). An image-only PDF page shows in Wint's web app but **blank in Wint's
   mobile app**, so upload **JPEG** (`image/jpeg`) images instead, one per page.
 - **`Persons`** is accepted, including the account holder with `Id: 0`. Wint copies every participant
