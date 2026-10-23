@@ -16,6 +16,7 @@ from ..core.models import PageState, PageStatus, ReceiptDraft, ReferenceData
 
 WARN_STYLE = f"background-color: {theme.SURFACE_WARNING};"
 ERROR_STYLE = f"background-color: {theme.SURFACE_ERROR};"
+AMOUNT_STYLE = "font-weight: 700;"  # the recognised total is the number to check first
 
 
 def parse_amount(text: str) -> float | None:
@@ -51,6 +52,7 @@ class ReceiptForm(QWidget):
         self.date.setPlaceholderText("YYYY-MM-DD")
         self.amount = QLineEdit()
         self.amount.setPlaceholderText("total incl. VAT")
+        self.amount.setStyleSheet(AMOUNT_STYLE)
         self.currency = QLineEdit()
         self.currency.setMaxLength(3)
         self.supplier = QLineEdit()
@@ -235,15 +237,19 @@ class ReceiptForm(QWidget):
 
     # ---- issues
 
+    def _base_style(self, w) -> str:
+        """Per-field style that the amber/red highlights are added to; the amount is always bold."""
+        return AMOUNT_STYLE if w is self.amount else ""
+
     def show_issues(self, issues: list[Issue]) -> None:
         widgets = {"date": self.date, "amount": self.amount, "total": self.amount, "currency": self.currency,
                    "supplier_name": self.supplier, "category": self.category, "category_id": self.category,
                    "payment_method": self.payment, "description": self.comment}
         for w in set(widgets.values()):
-            w.setStyleSheet("")
+            w.setStyleSheet(self._base_style(w))
         for i in sorted(issues, key=lambda i: i.level is Level.ERROR):  # errors win
             if w := widgets.get(i.field):
-                w.setStyleSheet(ERROR_STYLE if i.level is Level.ERROR else WARN_STYLE)
+                w.setStyleSheet(self._base_style(w) + (ERROR_STYLE if i.level is Level.ERROR else WARN_STYLE))
         if not issues:
             self.issues.setText(f"<span style='color:{theme.OK_TEXT}'>✓ No problems found</span>")
             return
