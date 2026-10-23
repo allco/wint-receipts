@@ -310,7 +310,7 @@ def test_page_context_menu(window):
     window.page_list.setCurrentRow(1)
     menu = window._page_menu()
     texts = [a.text() for a in menu.actions() if not a.isSeparator()]
-    assert texts == ["Read again with AI", "Delete page"]
+    assert texts == ["Read again with AI", "Approve", "Upload to Wint", "Delete page"]
     delete = next(a for a in menu.actions() if a.text() == "Delete page")
     assert delete.isEnabled()
     delete.trigger()
@@ -717,3 +717,46 @@ def test_command_line(tmp_path, sample_pdf, capsys, monkeypatch):
     with pytest.raises(SystemExit):
         entry.parse_args(["--version"])
     assert "wint-receipts" in capsys.readouterr().out
+
+
+
+def test_menu_approve_and_upload_single_page(window, monkeypatch):
+    s = window.session
+    window.page_list.setCurrentRow(0)
+    actions = {a.text(): a for a in window._page_menu().actions() if not a.isSeparator()}
+    assert actions["Approve"].isEnabled() and not actions["Upload to Wint"].isEnabled()
+    actions["Approve"].trigger()
+    assert s.pages[0].status is PageStatus.APPROVED
+    s.pages[1].status = PageStatus.APPROVED  # another approved page that must NOT be uploaded
+    window.page_list.setCurrentRow(0)
+    actions = {a.text(): a for a in window._page_menu().actions() if not a.isSeparator()}
+    assert not actions["Approve"].isEnabled() and actions["Upload to Wint"].isEnabled()
+    queued = []
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a: mw.QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(mw.MainWindow, "_upload_next", lambda self: queued.append(list(self._upload_queue)))
+    actions["Upload to Wint"].trigger()
+    assert queued == [[0]]
+
+
+def test_multi_select_menu_acts_on_each_fitting_page(window, monkeypatch):
+    from PySide6.QtCore import QItemSelectionModel
+    s = window.session
+    window._restore_all()  # bring back the blank page 3
+    s.pages[2].status = PageStatus.NEEDS_REVIEW
+    s.pages[2].draft = s.pages[0].draft.model_copy(update={"pages": [2]})  # the blank page gets real values
+    s.pages[1].status = PageStatus.APPROVED
+    lst = window.page_list
+    lst.setCurrentRow(0)
+    for i in (1, 2):
+        lst.selectionModel().select(lst.model().index(i, 0), QItemSelectionModel.SelectionFlag.Select)
+    assert window._selected_indices() == [0, 1, 2]
+    actions = {a.text(): a for a in window._page_menu().actions() if not a.isSeparator()}
+    assert set(actions) >= {"Read with AI (3)", "Approve (2)", "Upload to Wint (1)", "Delete 3 pages"}
+    actions["Approve (2)"].trigger()  # pages 1 and 3 (page 2 is already approved)
+    assert [p.status for p in s.pages] == [PageStatus.APPROVED] * 3
+    actions = {a.text(): a for a in window._page_menu().actions() if not a.isSeparator()}
+    assert "Upload to Wint (3)" in actions and not actions["Approve (0)"].isEnabled()
+    actions["Delete 3 pages"].trigger()
+    assert all(p.deleted for p in s.pages)
+    window._restore_all()
+    assert not any(p.deleted for p in s.pages)

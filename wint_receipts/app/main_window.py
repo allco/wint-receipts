@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         self.page_list.setObjectName("pages")
         self.page_list.setMinimumWidth(320)
         self.page_list.currentRowChanged.connect(self._show_page)
+        self.page_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.page_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.page_list.customContextMenuRequested.connect(self._show_page_menu)
         self.image_pane = ImagePane()
@@ -736,6 +737,7 @@ class MainWindow(QMainWindow):
         self.form.show_issues(issues if p and p.draft else [])
 
     def _approve(self) -> None:
+        """Approve the page shown in the form and move on to the next one needing review."""
         index = self._current_index()
         p = self._page(index)
         if p is None or p.draft is None or self._owner_of(index) is not None:
@@ -743,19 +745,48 @@ class MainWindow(QMainWindow):
         if p.status not in (PageStatus.NEEDS_REVIEW, PageStatus.FAILED, PageStatus.APPROVED):
             return
         p.draft = self.form.read_draft(p.draft)
-        issues = self._issues(p)
-        if checks.blocking(issues) or self.form.date_text_invalid():
+        if self.form.date_text_invalid() or not self._approve_page(p):
             self._run_checks()
             self.statusBar().showMessage("Fix the errors marked in red before approving", 6000)
             return
+        self._next_needing_review()
+
+    def _approvable(self, p: PageState) -> bool:
+        return (p.draft is not None and not p.deleted and self._owner_of(p.index) is None
+                and p.status in (PageStatus.NEEDS_REVIEW, PageStatus.FAILED))
+
+    def _approve_selected(self, indices: list[int]) -> None:
+        """Approve several pages from the list menu; pages with red errors stay as they are."""
+        if indices == [self._current_index()]:
+            self._approve()
+            return
+        current = self._page(self._current_index())
+        if current is not None and current.index in indices and current.draft is not None:
+            current.draft = self.form.read_draft(current.draft)
+        done, blocked = 0, []
+        for i in indices:
+            p = self._page(i)
+            if p is not None and self._approvable(p):
+                if self._approve_page(p):
+                    done += 1
+                else:
+                    blocked.append(i + 1)
+        msg = f"Approved {done} page{'s' if done != 1 else ''}"
+        if blocked:
+            msg += f"; not approved (fix the errors first): page {', '.join(map(str, blocked))}"
+        self.statusBar().showMessage(msg, 8000)
+
+    def _approve_page(self, p: PageState) -> bool:
+        if checks.blocking(self._issues(p)):
+            return False
         p.status = PageStatus.APPROVED
         p.error = None
         if p.draft.participants_suggested:  # approving is the user's confirmation
             p.draft.participants_suggested, p.draft.participants_reviewed = False, True
         learned = self._learn_from(p)
         self._log_approval(p, learned)
-        self._after_page_change(index)
-        self._next_needing_review()
+        self._after_page_change(p.index)
+        return True
 
     def _load_learnings(self) -> Learnings | None:
         path = self.settings.learnings_path()
@@ -799,19 +830,41 @@ class MainWindow(QMainWindow):
     def _can_delete(self, p: PageState) -> bool:
         return not p.deleted and p.wint_receipt_id is None and p.status not in (PageStatus.UPLOADING, PageStatus.RECOGNIZING)
 
+    def _selected_indices(self) -> list[int]:
+        rows = sorted(self.page_list.row(it) for it in self.page_list.selectedItems() if not it.isHidden())
+        if not rows and self._current_index() >= 0:
+            rows = [self._current_index()]
+        return rows
+
     def _page_menu(self) -> QMenu:
-        """Context menu for the current page in the list."""
+        """Context menu for the selected pages; each action applies to the pages it fits."""
         menu = QMenu(self.page_list)
-        p = self._page(self._current_index())
-        read = menu.addAction(app_icons.icon("recognise"), "Read again with AI" if p and p.recognition else "Read with AI",
-                              lambda: self._recognize([self._current_index()], force=True))
-        read.setEnabled(p is not None and not p.deleted and p.wint_receipt_id is None and p.status not in (
-            PageStatus.RECOGNIZING, PageStatus.UPLOADING, PageStatus.UPLOADED))
+        pages = [p for i in self._selected_indices() if (p := self._page(i)) is not None]
+        count = lambda items, one, many: one if len(pages) == 1 else f"{many} ({len(items)})"  # noqa: E731
+
+        readable = [p.index for p in pages if not p.deleted and p.wint_receipt_id is None and p.status not in (
+            PageStatus.RECOGNIZING, PageStatus.UPLOADING, PageStatus.UPLOADED)]
+        again = any(p.recognition for p in pages)
+        read = menu.addAction(app_icons.icon("recognise"),
+                              count(readable, "Read again with AI" if again else "Read with AI", "Read with AI"),
+                              lambda: self._recognize(readable, force=True))
+        read.setEnabled(bool(readable))
+        approvable = [p.index for p in pages if self._approvable(p)]
+        approve = menu.addAction(count(approvable, "Approve", "Approve"), lambda: self._approve_selected(approvable))
+        approve.setShortcut(QKeySequence("Ctrl+Return"))  # shown as a hint
+        approve.setEnabled(bool(approvable))
+        uploadable = [p.index for p in pages if p.status is PageStatus.APPROVED and p.wint_receipt_id is None
+                      and not p.deleted and self._owner_of(p.index) is None]
+        send = menu.addAction(app_icons.icon("upload"), count(uploadable, "Upload to Wint", "Upload to Wint"),
+                              lambda: self._upload_approved(only=uploadable))
+        send.setEnabled(bool(uploadable) and self.upload_act.isEnabled())
         menu.addSeparator()
-        delete = menu.addAction("Delete page", self._delete_page)
+        deletable = [p.index for p in pages if self._can_delete(p)]
+        delete = menu.addAction("Delete page" if len(pages) == 1 else f"Delete {len(deletable)} pages",
+                                lambda: self._delete_pages(deletable))
         delete.setShortcut(QKeySequence.StandardKey.Delete)  # shown as a hint; the shortcut lives on the list
-        delete.setEnabled(p is not None and self._can_delete(p))
-        if p is not None and not delete.isEnabled():
+        delete.setEnabled(bool(deletable))
+        if pages and not deletable:
             delete.setToolTip("Uploaded pages and pages being processed can't be deleted")
         deleted = sum(q.deleted for q in self.session.pages) if self.session else 0
         if deleted:
@@ -821,18 +874,31 @@ class MainWindow(QMainWindow):
 
     def _show_page_menu(self, pos) -> None:
         item = self.page_list.itemAt(pos)
-        if item is not None:
-            self.page_list.setCurrentItem(item)  # right-click selects the page it acts on
+        if item is not None and not item.isSelected():
+            self.page_list.setCurrentItem(item)  # right-click outside the selection acts on that page only
         self._page_menu().exec(self.page_list.viewport().mapToGlobal(pos))
 
     def _delete_page(self) -> None:
-        index = self._current_index()
+        """Delete key / menu: delete the selected pages (or the current one)."""
+        self._delete_pages(self._selected_indices())
+
+    def _delete_pages(self, indices: list[int]) -> None:
+        targets = [i for i in indices if (p := self._page(i)) is not None and self._can_delete(p)]
+        if not targets:
+            self.statusBar().showMessage("These pages can't be deleted while they're processed or after upload", 6000)
+            return
+        for i in targets:
+            self._delete_one(i)
+        if self._current_index() in targets or self._current_index() < 0:
+            self._step_away_from(self._current_index() if self._current_index() >= 0 else targets[0])
+        for q in self.session.pages:
+            self._refresh_item(q.index)
+        self._update_status()
+        which = f"Page {targets[0] + 1}" if len(targets) == 1 else f"{len(targets)} pages"
+        self.statusBar().showMessage(f"{which} deleted — Ctrl+Z to restore", 6000)
+
+    def _delete_one(self, index: int) -> None:
         p = self._page(index)
-        if p is None or p.deleted:
-            return
-        if not self._can_delete(p):
-            self.statusBar().showMessage("This page can't be deleted while it is being processed or after it is uploaded", 6000)
-            return
         # Detach from the receipt it belongs to, and release pages attached to it.
         owner_index = self._owner_of(index)
         if owner_index is not None:
@@ -849,11 +915,7 @@ class MainWindow(QMainWindow):
             p.draft.pages = [index]
         p.deleted = True
         self._deleted_stack.append(index)
-        self._step_away_from(index)
-        self._after_page_change(index)
-        for q in self.session.pages:
-            self._refresh_item(q.index)
-        self.statusBar().showMessage(f"Page {index + 1} deleted — Ctrl+Z to restore", 6000)
+        self._schedule_save()
 
     def _step_away_from(self, index: int) -> bool:
         for delta in (1, -1):
@@ -929,13 +991,14 @@ class MainWindow(QMainWindow):
         lay.addWidget(bb)
         dlg.exec()
 
-    def _upload_approved(self) -> None:
+    def _upload_approved(self, only: list[int] | None = None) -> None:
+        """Upload every approved receipt, or only the given pages."""
         # Pages uploaded meanwhile (e.g. from another window) are in the ledger: mark them before choosing.
         self._restore_uploads(self.session)
         for q in self.session.pages:
             self._refresh_item(q.index)
         self._update_status()
-        pages = self._approved()
+        pages = [p for p in self._approved() if only is None or p.index in only]
         if not pages:
             QMessageBox.information(self, "Upload", "No approved receipts to upload.")
             return
