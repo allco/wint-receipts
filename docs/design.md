@@ -15,7 +15,7 @@ to get the real images.
 - **Show doubt, don't hide it.** Claude reports the fields it wasn't sure about. Those are marked
   amber, and errors that block approval are marked red. A clean form means there's nothing to check
   beyond a glance.
-- **Nothing is final until it's uploaded.** Skipping, deleting, merging and editing can all be undone.
+- **Nothing is final until it's uploaded.** Deleting, rotating and editing can all be undone.
   Upload is the only step that writes to Wint, and it asks for confirmation first.
 - **An empty pane explains itself.** Before there's anything to show, each pane says what will
   appear there and what to do next.
@@ -47,7 +47,7 @@ The window has a toolbar, three panes side by side, and a status bar.
 |---|---|---|---|
 | No PDF open | Explains the list and the status colours | Steps 1–3 and *Open PDF* | Explains the fields, the colours and the shortcuts |
 | AI reading | Row shows "AI reading" | The scan | "Claude AI is reading this receipt…" |
-| Failed / not read yet | Red or grey dot | The scan | Reason, plus *Read with AI* and *Skip page* |
+| Failed / not read yet | Red or grey dot | The scan | Reason, plus *Read with AI* |
 | Review | Row summary | The scan | The editable form |
 
 ![Empty state](design/01-empty.png)
@@ -145,13 +145,12 @@ disabled, they turn the border grey. They grow with the font size.
 | Next / previous page | PgDn / PgUp; deleted pages are skipped |
 | Zoom the scan | Mouse wheel, or the image bar: − / + (Ctrl+− / Ctrl++), 1:1 (Ctrl+1), Fit (Ctrl+0); double-click to fit |
 | Rotate a page | Image bar *Rotate left / right* (Ctrl+Shift+R / Ctrl+R). The turn is saved and used for the AI reading and the uploaded PDF page; the PDF file is untouched |
-| Merge a two-page receipt | *Attach to previous*; *Separate receipt* undoes it |
 | Remove a page | Right-click the page → *Delete page*, or `Del` in the list; Ctrl+Z restores |
 | Settings | Ctrl+, |
 
 - **Blank pages** never get a row; they count as deleted and can be restored.
 - **Editing** an approved receipt sends it back to *needs review*.
-- **Uploaded pages** are locked: they can't be edited, merged, rotated or deleted.
+- **Uploaded pages** are locked: they can't be edited, rotated or deleted.
 - **Sideways scans are turned automatically.** The AI reports the clockwise turn a page needs; the
   app applies it and says so in the AI notes. The rotate buttons override it.
 - **The form shows only what goes to Wint:** date, amount, currency, category, payment method. The AI

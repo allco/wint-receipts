@@ -29,7 +29,7 @@ What it does beyond reading the text:
 - **Says when it isn't sure.** Faded print, cut-off totals, handwriting or several candidate totals
   are returned as *uncertain fields*. The app marks those amber, so you know exactly where to look.
 - **Knows what it's looking at.** It recognises blank pages (left out of the list), receipt backs
-  (skipped), and pages that continue the receipt before them (the app suggests merging).
+  (skipped).
 - **Turns sideways scans upright.** It reports how a page must be turned to read normally, and the
   app turns the page: on screen, and in the PDF page sent to Wint. The *Rotate* buttons still let you
   correct it.
@@ -66,7 +66,6 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
 2. **Review.** For each page you see the scan next to the recognised fields. Uncertain fields and
    failed checks (VAT arithmetic, future dates, locked periods, missing category, ...) are marked in
    amber or red. Edit, then **Approve** (Ctrl+Enter).
-   - A receipt that runs over two pages can be merged with **Attach to previous**.
    - Blank pages are left out of the list (*Restore deleted pages* brings them back if Claude was
      wrong). Receipt backs are shown but skipped.
    - Rotated scans are turned upright automatically when the AI reads them. To turn one yourself, use
