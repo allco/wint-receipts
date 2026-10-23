@@ -261,7 +261,8 @@ class MainWindow(QMainWindow):
             return a
 
         act("Open PDF…", self._open_dialog, QKeySequence.StandardKey.Open)
-        self.recognize_act = act("Read with AI", lambda: self._recognize(None), tip="Let Claude AI read every page that hasn't been read yet")
+        self.recognize_act = act("Read with AI", self._read_with_ai,
+                                 tip="Let Claude AI read the pages; asks before reading pages again")
         tb.addSeparator()
         act("Previous", lambda: self._step(-1), "PgUp")
         act("Next", lambda: self._step(1), "PgDown")
@@ -543,6 +544,49 @@ class MainWindow(QMainWindow):
         self._step(1)
 
     # ---- recognition
+
+    def _read_with_ai(self) -> None:
+        """Toolbar action: read unread pages; when everything is read, offer to read pages again."""
+        if not self.session:
+            return
+        candidates = [p for p in self.session.pages if not p.deleted and p.wint_receipt_id is None
+                      and self._owner_of(p.index) is None
+                      and p.status not in (PageStatus.RECOGNIZING, PageStatus.UPLOADING, PageStatus.UPLOADED)]
+        if any(p.status in (PageStatus.NEW, PageStatus.FAILED) for p in candidates):
+            self._recognize(None)
+            return
+        unapproved = [p.index for p in candidates if p.status is not PageStatus.APPROVED]
+        everything = [p.index for p in candidates]
+        if not everything:
+            self.statusBar().showMessage("Nothing to read: every page is uploaded or being read", 6000)
+            return
+        choice = self._ask_read_again(len(unapproved), len(everything))
+        if choice == "unapproved":
+            self._recognize(unapproved, force=True)
+        elif choice == "all":
+            self._recognize(everything, force=True)
+
+    def _ask_read_again(self, unapproved: int, everything: int) -> str | None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Read with AI")
+        box.setText("Read the pages with AI again?")
+        box.setInformativeText(
+            "All pages have already been read. Reading again replaces what the AI read and any changes you "
+            "made on those pages.\n\nUploaded pages are never touched. It costs about $0.03 per page.")
+        plural = lambda n: f"{n} page{'s' if n != 1 else ''}"  # noqa: E731
+        some = box.addButton(f"Read {plural(unapproved)} not approved yet", QMessageBox.ButtonRole.AcceptRole) \
+            if unapproved else None
+        every = box.addButton(f"Read all {plural(everything)} again", QMessageBox.ButtonRole.DestructiveRole) \
+            if everything != unapproved else None
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        if some:
+            some.setObjectName("primary")
+            box.setStyleSheet(theme.STYLE_SHEET)
+        box.setDefaultButton(some or cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        return "unapproved" if clicked is some and some else "all" if clicked is every and every else None
 
     def _recognize(self, indices: list[int] | None, force: bool = False) -> None:
         if not self.session:

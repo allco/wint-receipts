@@ -596,3 +596,26 @@ def test_read_again_from_menu_and_busy_indicator(qtbot, monkeypatch, sample_pdf)
     gate.set()
     qtbot.waitUntil(lambda: w.session.pages[0].status is not PageStatus.RECOGNIZING, timeout=10000)
     assert len(calls) == 4
+
+
+def test_read_with_ai_asks_before_reading_again(window, monkeypatch, qtbot):
+    asked = []
+    queued = []
+    monkeypatch.setattr(mw.MainWindow, "_recognize", lambda self, indices, force=False: queued.append((indices, force)))
+    s = window.session
+    window._restore_all()  # page 3 (blank) back in the list
+    s.pages[2].status = PageStatus.NEW
+    window._read_with_ai()
+    assert queued == [(None, False)] and not asked  # unread pages: just read them, no question
+    queued.clear()
+    s.pages[2].status = PageStatus.NEEDS_REVIEW
+    s.pages[0].status = PageStatus.APPROVED
+    for answer, expected in (("unapproved", [1, 2]), ("all", [0, 1, 2]), (None, None)):
+        monkeypatch.setattr(mw.MainWindow, "_ask_read_again",
+                            lambda self, u, e, a=answer: (asked.append((u, e)), a)[1])
+        window._read_with_ai()
+        if expected is None:
+            assert not queued
+        else:
+            assert queued.pop() == (expected, True)
+    assert asked[-1] == (2, 3)  # 2 not approved, 3 in total
