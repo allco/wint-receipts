@@ -160,8 +160,6 @@ def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str
         "DateTime": datetime.combine(draft.date, datetime.min.time()).isoformat(),
         "Amount": round(draft.amount, 2),
         "Currency": draft.currency,
-        "SupplierName": draft.supplier_name or None,
-        "Comment": draft.comment or None,
         "ReceiptCategoryId": draft.category_id,
         "PaymentMethodId": draft.payment_method_id,
         "Dimensions": [],

@@ -417,7 +417,7 @@ class MainWindow(QMainWindow):
             detail = " · ".join(x for x in (
                 d.date.isoformat() if d.date else "?",
                 f"{format_amount(d.amount)} {d.currency}" if d.amount is not None else "?",
-                d.supplier_name) if x)
+                self._category_name(d.category_id)) if x)
         elif p.status is PageStatus.FAILED:
             detail = "failed"
         else:
@@ -429,6 +429,10 @@ class MainWindow(QMainWindow):
             QPalette.ColorRole.PlaceholderText if dim else QPalette.ColorRole.Text)))
         item.setToolTip(p.error or STATUS_LABELS[p.status])
         item.setHidden(p.deleted)
+
+    def _category_name(self, category_id: int | None) -> str:
+        cats = self.reference.categories if self.reference else []
+        return next((c.name for c in cats if c.id == category_id), "")
 
     def _show_page(self, index: int) -> None:
         p = self._page(index)
@@ -668,12 +672,9 @@ class MainWindow(QMainWindow):
             return []
         learned = []
         try:
-            if rec.supplier_name and d.supplier_name and rec.supplier_name.strip() != d.supplier_name.strip():
-                learned.append(self.learnings.learn_supplier(rec.supplier_name.strip(), d.supplier_name.strip()))
             supplier = d.supplier_name or rec.supplier_name
             if supplier and d.category_id is not None and d.category_id != rec.category_id:
-                name = next((c.name for c in (self.reference.categories if self.reference else [])
-                             if c.id == d.category_id), str(d.category_id))
+                name = self._category_name(d.category_id) or str(d.category_id)
                 learned.append(self.learnings.learn_category(supplier, rec.supplier_org_number, d.category_id, name))
         except OSError as e:
             self.statusBar().showMessage(f"Could not update the AI learnings file: {e}", 8000)

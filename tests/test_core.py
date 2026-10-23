@@ -130,11 +130,12 @@ def test_checks_errors(kw, field):
 
 def test_checks_warnings():
     d = good_draft(amount=50.0, date=date(2026, 5, 1), vat=[VatLine(rate=20, net=40, amount=10)])
-    rec = Recognition(page_kind=PageKind.RECEIPT, uncertain_fields=["supplier_name"])
+    rec = Recognition(page_kind=PageKind.RECEIPT, uncertain_fields=["date", "supplier_name"])
     issues = checks.check(d, REF, rec, today=date(2026, 10, 21))
     assert not checks.blocking(issues)
     msgs = " ".join(i.message for i in issues)
-    assert "locked period" in msgs and "Unusual VAT rate" in msgs and "wasn't sure" in msgs
+    assert "locked period" in msgs and "Unusual VAT rate" in msgs and "wasn't sure about the date" in msgs
+    assert "supplier" not in msgs  # not on the form, so no warning about it
 
 
 def test_checks_vat_sum_mismatch():
@@ -210,6 +211,7 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
 
 def test_receipt_post_body():
     body = receipt_post_body(good_draft(supplier_name="EasyPark"), b"%PDF-1.7", "cid-1", "scans-p1.pdf")
+    assert "SupplierName" not in body and "Comment" not in body  # neither is sent to Wint
     assert body["DateTime"] == "2026-10-20T00:00:00" and body["Amount"] == 44.85
     assert body["ReceiptCategoryId"] == 7 and body["PaymentMethodId"] == 1 and body["ClientId"] == "cid-1"
     att = body["Attachments"][0]
@@ -323,8 +325,8 @@ def test_changed_fields():
                       supplier_name="EasyPark", category_id=7)
     same = good_draft(supplier_name="EasyPark")
     assert reclog.changed_fields(rec, same) == []
-    edited = good_draft(supplier_name="EasyPark AB", amount=45.0, date=date(2026, 10, 19))
-    assert reclog.changed_fields(rec, edited) == ["date", "total", "supplier_name"]
+    edited = good_draft(supplier_name="EasyPark AB", amount=45.0, date=date(2026, 10, 19), category_id=8)
+    assert reclog.changed_fields(rec, edited) == ["date", "total", "category_id"]
 
 
 def test_logs_enabled_by_default_and_can_be_turned_off(tmp_path):

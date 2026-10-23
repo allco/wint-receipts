@@ -39,8 +39,6 @@ def changed_fields(rec: Recognition | None, draft: ReceiptDraft) -> list[str]:
         "date": (rec.date, draft.date.isoformat() if draft.date else None),
         "total": (rec.total, draft.amount),
         "currency": ((rec.currency or "").upper() or None, draft.currency or None),
-        "supplier_name": (rec.supplier_name or "", draft.supplier_name),
-        "description": (rec.description or "", draft.comment),
         "category_id": (rec.category_id, draft.category_id),
     }
     def differs(a, b) -> bool:

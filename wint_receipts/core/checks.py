@@ -8,7 +8,8 @@ from enum import StrEnum
 from .models import ReceiptDraft, Recognition, ReferenceData
 
 SWEDISH_VAT_RATES = {0.0, 6.0, 12.0, 25.0}
-TOLERANCE = 0.02  # öre rounding
+TOLERANCE = 0.02
+REVIEWED_FIELDS = {"date", "total", "currency", "category_id", "vat"}  # AI fields shown on the form  # öre rounding
 
 
 class Level(StrEnum):
@@ -75,7 +76,8 @@ def check(
 
     if recognition:
         for f in recognition.uncertain_fields:
-            warn(f, f"The AI wasn't sure about the {f.replace('_', ' ')} — check it against the image")
+            if f in REVIEWED_FIELDS:  # e.g. the supplier is read but not shown, so doubt about it doesn't matter
+                warn(f, f"The AI wasn't sure about the {f.replace('_', ' ')} — check it against the image")
 
     return issues
 

@@ -34,7 +34,6 @@ class Recognition(BaseModel):
     supplier_name: str | None = None
     supplier_org_number: str | None = None
     vat: list[VatLine] = Field(default_factory=list)
-    description: str | None = None
     category_id: int | None = None
     payment_hint: Literal["card", "cash", "swish", "invoice", "unknown"] = "unknown"
     uncertain_fields: list[str] = Field(default_factory=list)
@@ -60,8 +59,7 @@ class ReceiptDraft(BaseModel):
     date: datetime.date | None = None
     amount: float | None = None
     currency: str = "SEK"
-    supplier_name: str = ""
-    comment: str = ""
+    supplier_name: str = ""  # internal: matches AI learnings; not shown on the form or sent to Wint
     category_id: int | None = None
     payment_method_id: int | None = None
     vat: list[VatLine] = Field(default_factory=list)
@@ -82,7 +80,6 @@ class ReceiptDraft(BaseModel):
             amount=rec.total,
             currency=(rec.currency or "SEK").upper(),
             supplier_name=rec.supplier_name or "",
-            comment=rec.description or "",
             category_id=rec.category_id,
             payment_method_id=default_payment_method,
             vat=rec.vat,

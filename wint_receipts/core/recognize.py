@@ -33,7 +33,6 @@ RECOGNITION_SCHEMA: dict = {
                 "additionalProperties": False,
             },
         },
-        "description": {**_STR_OR_NULL, "description": "Short description of what was bought"},
         "category_id": {"type": ["integer", "null"]},
         "payment_hint": {"type": "string", "enum": ["card", "cash", "swish", "invoice", "unknown"]},
         "uncertain_fields": {"type": "array", "items": {"type": "string"}},
@@ -43,7 +42,7 @@ RECOGNITION_SCHEMA: dict = {
     },
     "required": [
         "page_kind", "date", "total", "currency", "supplier_name", "supplier_org_number", "vat",
-        "description", "category_id", "payment_hint", "uncertain_fields", "notes", "rotation_needed",
+        "category_id", "payment_hint", "uncertain_fields", "notes", "rotation_needed",
     ],
     "additionalProperties": False,
 }
@@ -63,7 +62,6 @@ Rules:
 - vat: one line per VAT rate printed (rate in percent, net if printed, VAT amount).
 - category_id: pick the best match from this list, or null if none fits:
 {categories}
-- description: a few words on what was bought, in the receipt's language.
 - uncertain_fields: name every field you could not read with confidence (faded print, cut off,
   handwriting, several candidate totals). Do not guess silently; if unreadable, use null and list it.
 - notes: anything a reviewer should know, in one or two sentences. Empty string if nothing.

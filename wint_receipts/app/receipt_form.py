@@ -16,7 +16,7 @@ from ..core.models import PageState, PageStatus, ReceiptDraft, ReferenceData
 
 WARN_STYLE = f"background-color: {theme.SURFACE_WARNING};"
 ERROR_STYLE = f"background-color: {theme.SURFACE_ERROR};"
-BOLD_STYLE = "font-weight: 700;"  # the amount and supplier are what to check first
+BOLD_STYLE = "font-weight: 700;"  # the amount is the number to check first
 
 
 def parse_amount(text: str) -> float | None:
@@ -55,9 +55,6 @@ class ReceiptForm(QWidget):
         self.amount.setStyleSheet(BOLD_STYLE)
         self.currency = QLineEdit()
         self.currency.setMaxLength(3)
-        self.supplier = QLineEdit()
-        self.supplier.setStyleSheet(BOLD_STYLE)
-        self.comment = QLineEdit()
         self.category = QComboBox()
         self.payment = QComboBox()
         self.vat = QLabel()
@@ -69,7 +66,7 @@ class ReceiptForm(QWidget):
         self.issues = QLabel()
         self.issues.setWordWrap(True)
 
-        for w in (self.date, self.amount, self.currency, self.supplier, self.comment):
+        for w in (self.date, self.amount, self.currency):
             w.textEdited.connect(self._edited)
         for w in (self.category, self.payment):
             w.currentIndexChanged.connect(self._edited)
@@ -78,8 +75,6 @@ class ReceiptForm(QWidget):
         form.addRow("Date", self.date)
         form.addRow("Amount", self.amount)
         form.addRow("Currency", self.currency)
-        form.addRow("Supplier", self.supplier)
-        form.addRow("Comment", self.comment)
         form.addRow("Category", self.category)
         form.addRow("Payment method", self.payment)
         form.addRow("VAT (AI-read)", self.vat)
@@ -159,7 +154,7 @@ class ReceiptForm(QWidget):
         try:
             enabled = page is not None and page.draft is not None and merged_into is None \
                 and page.status not in (PageStatus.UPLOADED, PageStatus.UPLOADING)
-            for w in (self.date, self.amount, self.currency, self.supplier, self.comment, self.category,
+            for w in (self.date, self.amount, self.currency, self.category,
                       self.payment, self.approve_btn):
                 w.setEnabled(enabled)
             if page is None:
@@ -199,8 +194,6 @@ class ReceiptForm(QWidget):
         self.date.setText(d.date.isoformat() if d.date else "")
         self.amount.setText(format_amount(d.amount))
         self.currency.setText(d.currency)
-        self.supplier.setText(d.supplier_name)
-        self.comment.setText(d.comment)
         self.category.setCurrentIndex(max(self.category.findData(d.category_id), 0))
         self.payment.setCurrentIndex(max(self.payment.findData(d.payment_method_id), 0))
         self.vat.setText("; ".join(
@@ -220,8 +213,6 @@ class ReceiptForm(QWidget):
             "date": d,
             "amount": parse_amount(self.amount.text()),
             "currency": self.currency.text().strip().upper(),
-            "supplier_name": self.supplier.text().strip(),
-            "comment": self.comment.text().strip(),
             "category_id": self.category.currentData(),
             "payment_method_id": self.payment.currentData(),
         })
@@ -239,13 +230,13 @@ class ReceiptForm(QWidget):
     # ---- issues
 
     def _base_style(self, w) -> str:
-        """Per-field style that the amber/red highlights are added to; amount and supplier are bold."""
-        return BOLD_STYLE if w in (self.amount, self.supplier) else ""
+        """Per-field style that the amber/red highlights are added to; the amount is bold."""
+        return BOLD_STYLE if w is self.amount else ""
 
     def show_issues(self, issues: list[Issue]) -> None:
         widgets = {"date": self.date, "amount": self.amount, "total": self.amount, "currency": self.currency,
-                   "supplier_name": self.supplier, "category": self.category, "category_id": self.category,
-                   "payment_method": self.payment, "description": self.comment}
+                   "category": self.category, "category_id": self.category,
+                   "payment_method": self.payment}
         for w in set(widgets.values()):
             w.setStyleSheet(self._base_style(w))
         for i in sorted(issues, key=lambda i: i.level is Level.ERROR):  # errors win

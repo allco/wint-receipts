@@ -55,11 +55,11 @@ def test_recognition_fills_pages(window):
 
 def test_approve_edit_and_persist(window, qtbot, sample_pdf):
     window.page_list.setCurrentRow(0)
-    window.form.supplier.setText("EasyPark")
-    window.form.supplier.textEdited.emit("EasyPark")
+    window.form.currency.setText("EUR")
+    window.form.currency.textEdited.emit("EUR")
     window._approve()
     p0 = window.session.pages[0]
-    assert p0.status is PageStatus.APPROVED and p0.draft.supplier_name == "EasyPark"
+    assert p0.status is PageStatus.APPROVED and p0.draft.currency == "EUR"
     assert window._current_index() == 1  # moved on to the next page needing review
     window._save_now()
     saved = json.loads(session_path(sample_pdf.resolve()).read_text())
@@ -133,12 +133,12 @@ def test_recognition_log(window, tmp_path):
     assert [e["event"] for e in lines] == ["recognized"] * 3
     assert lines[0]["page"] == 1 and lines[0]["cost_usd"] == 0.01 and lines[0]["recognition"]["total"] == 44.85
     window.page_list.setCurrentRow(0)
-    window.form.supplier.setText("EasyPark")
-    window.form.supplier.textEdited.emit("EasyPark")
+    window.form.currency.setText("EUR")
+    window.form.currency.textEdited.emit("EUR")
     window._approve()
     approved = json.loads((tmp_path / "recognition.log").read_text().splitlines()[-1])
-    assert approved["event"] == "approved" and approved["changed"] == ["supplier_name"]
-    assert approved["final"]["supplier_name"] == "EasyPark" and approved["uncertain"] == ["total"]
+    assert approved["event"] == "approved" and approved["changed"] == ["currency"]
+    assert approved["final"]["currency"] == "EUR" and approved["uncertain"] == ["total"]
 
 
 def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
@@ -381,7 +381,7 @@ def test_amount_is_bold_also_when_highlighted(window):
     window.page_list.setCurrentRow(0)  # rec_for marks "total" uncertain → amber highlight on amount
     style = window.form.amount.styleSheet()
     assert "font-weight: 700" in style and "background-color" in style
-    assert "font-weight: 700" in window.form.supplier.styleSheet()
+    assert not hasattr(window.form, "supplier") and not hasattr(window.form, "comment")
 
 
 def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pdf, tmp_path):
@@ -406,15 +406,13 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
     qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
     w.page_list.setCurrentRow(0)
     w.form.category.setCurrentIndex(w.form.category.findData(8))   # the user corrects the category
-    w.form.supplier.setText("Mr Wok AB")                            # ...and the supplier name
-    w.form.supplier.textEdited.emit("Mr Wok AB")
     w._approve()
     text = (tmp_path / "learnings.txt").read_text()
-    assert 'supplier: "MR WOK" = "Mr Wok AB"' in text and '= "Representation" [8]' in text
+    assert 'category: "MR WOK" = "Representation" [8]' in text
     w._recognize([1], force=True)  # read another receipt from the same place
     qtbot.waitUntil(lambda: w.session.pages[1].status is not PageStatus.RECOGNIZING, timeout=10000)
     d = w.session.pages[1].draft
-    assert d.category_id == 8 and d.supplier_name == "Mr Wok AB"
+    assert d.category_id == 8
     assert "earlier correction" in w.session.pages[1].recognition.notes
     assert "Representation" in prompts[-1]  # the AI is told as well
 
