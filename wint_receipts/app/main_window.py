@@ -939,9 +939,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Upload", "No approved receipts to upload.")
             return
         if not self.settings.uploads_enabled:
-            QMessageBox.information(self, "Upload", "Uploads are turned off in Settings, because creating receipts "
-                                    "has not been tested against the Wint API yet.\n\nUse “Preview request” to see "
-                                    "what would be sent.")
+            QMessageBox.information(self, "Upload", "Uploads are turned off in Settings → Upload.\n\n"
+                                    "“Preview request” shows what would be sent.")
             return
         bad = [p.index + 1 for p in pages if checks.blocking(self._issues(p))]
         if bad:

@@ -69,8 +69,7 @@ class Settings(BaseModel):
     recognition_dpi: int = 200
     parallel_recognitions: int = 3
     default_payment_method_id: int | None = None
-    # Creating receipts in Wint is untested: off until the API tests are done.
-    uploads_enabled: bool = False
+    uploads_enabled: bool = True
     attachment_format: str = "jpeg"  # "jpeg" (one image per page) or "pdf" (the scan's page as PDF)
     # Corrections the user made, reused in later AI readings (a plain text file; see core/learnings.py).
     learnings_enabled: bool = True

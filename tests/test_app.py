@@ -78,6 +78,7 @@ def test_approve_blocked_on_errors(window):
 
 
 def test_upload_blocked_when_disabled(window, monkeypatch):
+    window.settings = window.settings.model_copy(update={"uploads_enabled": False})
     window.page_list.setCurrentRow(0)
     window._approve()
     shown = []
@@ -696,3 +697,23 @@ def test_upload_skips_pages_already_in_the_ledger(window, monkeypatch):
     assert s.pages[0].status is PageStatus.UPLOADED and s.pages[0].wint_receipt_id == 3027387
     assert "☁ Wint #3027387" in window.page_list.item(0).text()
     assert shown and "No approved receipts" in shown[0]  # nothing left to upload
+
+
+def test_command_line(tmp_path, sample_pdf, capsys, monkeypatch):
+    from wint_receipts.app import main as entry
+    monkeypatch.chdir(sample_pdf.parent)
+    args, qt = entry.parse_args([sample_pdf.name, "-platform", "offscreen"])
+    assert args.pdf == sample_pdf.resolve() and qt == ["-platform", "offscreen"]
+    assert entry.parse_args([])[0].pdf is None
+    for bad, message in ((str(tmp_path / "missing.pdf"), "no such file"), (str(tmp_path / "config"), "no such file")):
+        with pytest.raises(SystemExit):
+            entry.parse_args([bad])
+        assert message in capsys.readouterr().err
+    note = tmp_path / "notes.txt"
+    note.write_text("x")
+    with pytest.raises(SystemExit):
+        entry.parse_args([str(note)])
+    assert "not a PDF" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        entry.parse_args(["--version"])
+    assert "wint-receipts" in capsys.readouterr().out

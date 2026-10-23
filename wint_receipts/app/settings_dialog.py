@@ -110,8 +110,8 @@ class SettingsDialog(QDialog):
         self.payment.setCurrentIndex(max(idx, 0))
         self.uploads = QCheckBox("Enable uploads to Wint")
         self.uploads.setChecked(settings.uploads_enabled)
-        warn = QLabel("Creating receipts has not been tested against the live API yet. "
-                      "Leave this off until the API tests are done; you can still preview requests.")
+        warn = QLabel("Approved receipts are created in Wint when you click “Upload approved”. "
+                      "Turn this off to only preview requests.")
         warn.setWordWrap(True)
         up_box = QGroupBox("Upload")
         uf = QFormLayout(up_box)
