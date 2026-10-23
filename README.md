@@ -84,8 +84,11 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - **Address book** (toolbar): add, edit or remove the people you can pick, straight in Wint
      (`AddReceiptPerson` / `RemoveReceiptPerson`). Wint has no edit, so editing adds the corrected
      person and then removes the old entry. Not yet tried against the live API.
-   - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
-     The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
+   - Right-click a page in the list for **Read again with AI**, **Approve**, **Upload to Wint** or
+     **Delete page** (`Del`). Select several pages with Ctrl/Shift+click and the menu acts on all of
+     them that fit. Deleting doesn't change the PDF file; Ctrl+Z or *Restore deleted pages* brings it
+     back.
+   - Uploaded pages get their own mark: a slate dot with a ✓, and their Wint receipt number.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) attached, as a
    JPEG per page (or a PDF, in Settings). Before creating anything, the app checks Wint for the same
    `ClientId` and for a receipt with the same date and amount, and asks if it finds one. Every upload

@@ -80,11 +80,11 @@ hover `#2878AB`.
 |---|---|---|---|---|
 | waiting | `#9E9E9E` | | skipped | `#757575` |
 | AI reading | `#1E88E5` | | uploading | `#1E88E5` |
-| needs review | `#F9A825` | | uploaded | `#2E7D32` |
+| needs review | `#F9A825` | | uploaded | `#455A64` with a white ✓ |
 | approved | `#43A047` | | failed | `#E53935` |
 
 A status is never shown by colour alone. Each row also has text (the summary, or "AI reading",
-"failed", …) and a tooltip, so the dots work for colour-blind users too. Dots have a white outline
+"failed", …) and a tooltip, so the dots work for colour-blind users too. *Uploaded* is the only dot with a mark (✓), so it can't be mistaken for the green *approved*. Dots have a white outline
 so they stay visible on the blue selected row.
 
 ## Type
@@ -145,7 +145,8 @@ disabled, they turn the border grey. They grow with the font size.
 | Next / previous page | PgDn / PgUp; deleted pages are skipped |
 | Zoom the scan | Mouse wheel, or the image bar: − / + (Ctrl+− / Ctrl++), 1:1 (Ctrl+1), Fit (Ctrl+0); double-click to fit |
 | Rotate a page | Image bar *Rotate left / right* (Ctrl+Shift+R / Ctrl+R). The turn is saved and used for the AI reading and the uploaded PDF page; the PDF file is untouched |
-| Remove a page | Right-click the page → *Delete page*, or `Del` in the list; Ctrl+Z restores |
+| Act on several pages | Ctrl+click / Shift+click in the list, then right-click: *Read with AI (N)*, *Approve (N)*, *Upload to Wint (N)*, *Delete N pages*; each item applies to the selected pages it fits |
+| Remove a page | Right-click → *Delete page*, or `Del` in the list (deletes all selected); Ctrl+Z restores |
 | Settings | Ctrl+, |
 
 - **Blank pages** never get a row; they count as deleted and can be restored.
