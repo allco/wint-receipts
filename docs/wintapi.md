@@ -148,6 +148,25 @@ out. Send it whenever you list receipts:
 X-Wint-Capabilities: ReceiptPaymentMethodNullability
 ```
 
+## Creating a receipt: what a real upload showed (2026-10-23)
+
+One receipt was created for real (`POST /api/Receipt` → `3026953`, 660 SEK Representation) and read back:
+
+- **The response** is the new receipt id as a bare integer. A ~5.7 MB JSON body was accepted.
+- **State** right after creation is `0` (*Received*), so **no `Sign` call is needed**: like the receipts made
+  in Wint's own app, it goes on to booking by itself.
+- **`Attachments`** with base64 `Data` works; `Images` isn't needed. Wint keeps the file as sent
+  (downloaded back byte for byte). An image-only PDF page shows in Wint's web app but **blank in Wint's
+  mobile app**, so upload **JPEG** (`image/jpeg`) images instead, one per page.
+- **`Persons`** is accepted, including the account holder with `Id: 0`. Wint copies every participant
+  onto the receipt with new ids (here 1813614, 1813615).
+- **`Intent`** is stored as sent.
+- **`ClientId`**: `GET /api/Receipt?ClientId=…` finds the receipt, although `GET /api/Receipt/{id}` shows
+  `ClientId: null`. So `ClientId` works as a retry/idempotency key.
+- **Duplicates:** there's no delete. `POST /api/Receipt/Cancel/{id}` leaves the receipt visible as
+  *Canceled* (state 2). So check before creating: `ClientId` first, then same date + amount
+  (`AmountFrom`/`AmountTo`).
+
 ## Receipts (kvitton) — guide
 
 Receipts are the expense receipts employees submit for bookkeeping and (for own expenses)

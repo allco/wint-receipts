@@ -86,9 +86,12 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      person and then removes the old entry. Not yet tried against the live API.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
-3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
-   attachment. **Uploads are disabled by default** until the create-receipt API has been tested.
-   Until then, **Preview request** shows the exact JSON that would be sent.
+3. **Upload.** Each approved receipt is created in Wint with only its own page(s) attached, as a
+   JPEG per page (or a PDF, in Settings). Before creating anything, the app checks Wint for the same
+   `ClientId` and for a receipt with the same date and amount, and asks if it finds one. Every upload
+   is written to an upload ledger (`uploads.jsonl` in the settings folder), so uploaded pages stay
+   marked as uploaded even if a session file is lost. **Uploads are off by default**; turn them on in
+   Settings. **Preview request** shows the exact JSON that would be sent.
 
 Review state is saved next to the PDF as `<file>.pdf.wint.json`, so you can close the app and
 continue later. Every receipt has a stable `ClientId`, and the uploader checks it before creating
@@ -380,8 +383,6 @@ docs/design.md         design notes; docs/design/*.png are screens (Git LFS)
 
 ## Open items
 
-- `POST /api/Receipt` hasn't been tested against the live API yet. Still to confirm: the required
-  fields, `Attachments` vs `Images`, and whether a receipt must be signed afterwards
-  (`POST /api/Receipt/Sign/{id}`). After that, adjust `receipt_post_body()` and `upload_page()`, and
-  turn uploads on.
+- Creating receipts was tested with one real upload (see `docs/wintapi.md`); the JPEG attachment format
+  hasn't been uploaded for real yet.
 - Guests on representation receipts (`Persons`) aren't supported yet.
