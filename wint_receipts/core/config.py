@@ -66,10 +66,16 @@ class Settings(BaseModel):
     default_payment_method_id: int | None = None
     # Creating receipts in Wint is untested: off until the API tests are done.
     uploads_enabled: bool = False
+    # Corrections the user made, reused in later AI readings (a plain text file; see core/learnings.py).
+    learnings_enabled: bool = True
+    learnings_file: str = Field(default_factory=lambda: str(config_dir() / "learnings.txt"))
     font_scale: float = 1.5  # multiplies the system UI font size; 0.5–2.0 in the Settings presets
 
     def request_log_path(self) -> Path | None:
         return Path(self.request_log) if self.request_log_enabled and self.request_log else None
+
+    def learnings_path(self) -> Path | None:
+        return Path(self.learnings_file) if self.learnings_enabled and self.learnings_file else None
 
     def recognition_log_path(self) -> Path | None:
         return Path(self.recognition_log) if self.recognition_log_enabled and self.recognition_log else None

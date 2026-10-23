@@ -81,9 +81,18 @@ class RecognitionResult:
     usage: dict = field(default_factory=dict)  # token counts as reported by the CLI
 
 
-def build_prompt(image_name: str, categories: Sequence[Category]) -> str:
+LEARNINGS_SECTION = """
+The user corrected earlier readings. Follow these when they apply to this receipt:
+{learnings}
+"""
+
+
+def build_prompt(image_name: str, categories: Sequence[Category], learnings: str = "") -> str:
     cats = "\n".join(f"  {c.id}: {c.name}" for c in categories) or "  (no categories available; use null)"
-    return PROMPT.format(image=image_name, categories=cats)
+    prompt = PROMPT.format(image=image_name, categories=cats)
+    if learnings.strip():
+        prompt += LEARNINGS_SECTION.format(learnings=learnings.strip())
+    return prompt
 
 
 def resolve_claude(claude_path: str) -> str:
@@ -133,6 +142,7 @@ def recognize_png(
     claude_path: str = "claude",
     model: str = "sonnet",
     timeout: float = 300,
+    learnings: str = "",
 ) -> RecognitionResult:
     with tempfile.TemporaryDirectory(prefix="wint-page-") as tmp:
         image = Path(tmp) / "page.png"
@@ -141,7 +151,7 @@ def recognize_png(
         start = time.monotonic()
         try:
             proc = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, encoding="utf-8",
-                                  timeout=timeout, input=build_prompt(image.name, categories))
+                                  timeout=timeout, input=build_prompt(image.name, categories, learnings))
         except FileNotFoundError as e:
             raise RecognitionError(f"claude CLI not found at {claude_path!r}") from e
         except subprocess.TimeoutExpired as e:
