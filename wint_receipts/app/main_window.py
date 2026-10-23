@@ -10,7 +10,9 @@ from shiboken6 import isValid
 from PySide6.QtGui import QAction, QBrush, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
-    QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QStackedWidget, QToolBar, QVBoxLayout,
+    QHBoxLayout, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QSplitter, QStackedWidget,
+    QToolBar,
+    QVBoxLayout, QWidget,
 )
 
 from ..core import checks, config, pdf, reclog, recognize, upload
@@ -122,6 +124,21 @@ class MainWindow(QMainWindow):
         self.restore_btn.clicked.connect(self._restore_all)
         self.restore_btn.hide()
         self.statusBar().addWidget(self.restore_btn)
+        self.ai_busy = QWidget()
+        busy = QHBoxLayout(self.ai_busy)
+        busy.setContentsMargins(0, 0, 8, 0)
+        self.ai_busy_icon = QLabel()
+        self.ai_busy_icon.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.ai_busy_bar = QProgressBar()
+        self.ai_busy_bar.setRange(0, 0)  # indeterminate: moves while the AI works
+        self.ai_busy_bar.setTextVisible(False)
+        self.ai_busy_bar.setFixedWidth(self.fontMetrics().averageCharWidth() * 12)
+        self.ai_busy_bar.setMaximumHeight(self.fontMetrics().height() // 2 + 2)
+        self.ai_busy_label = QLabel()
+        for w in (self.ai_busy_icon, self.ai_busy_bar, self.ai_busy_label):
+            busy.addWidget(w)
+        self.ai_busy.hide()
+        self.statusBar().addPermanentWidget(self.ai_busy)
         self.status_label = QLabel()
         self.statusBar().addPermanentWidget(self.status_label)
         self._update_status()
@@ -761,6 +778,11 @@ class MainWindow(QMainWindow):
         """Context menu for the current page in the list."""
         menu = QMenu(self.page_list)
         p = self._page(self._current_index())
+        read = menu.addAction(app_icons.icon("recognise"), "Read again with AI" if p and p.recognition else "Read with AI",
+                              lambda: self._recognize([self._current_index()], force=True))
+        read.setEnabled(p is not None and not p.deleted and p.wint_receipt_id is None and p.status not in (
+            PageStatus.RECOGNIZING, PageStatus.UPLOADING, PageStatus.UPLOADED))
+        menu.addSeparator()
         delete = menu.addAction("Delete page", self._delete_page)
         delete.setShortcut(QKeySequence.StandardKey.Delete)  # shown as a hint; the shortcut lives on the list
         delete.setEnabled(p is not None and self._can_delete(p))
@@ -1009,6 +1031,13 @@ class MainWindow(QMainWindow):
         self.restore_btn.setText(f"Restore deleted pages ({deleted})")
         self.restore_btn.setVisible(deleted > 0)
         self.status_label.setText("   |   ".join(parts))
+        reading = sum(p.status is PageStatus.RECOGNIZING and not p.deleted for p in self.session.pages) if self.session else 0
+        if reading:
+            h = self.fontMetrics().height()
+            self.ai_busy_icon.setPixmap(app_icons.icon("recognise").pixmap(QSize(h, h), self.devicePixelRatioF()))
+            self.ai_busy_icon.setFixedSize(h, h)
+            self.ai_busy_label.setText(f"AI is reading {reading} page{'s' if reading != 1 else ''}…")
+        self.ai_busy.setVisible(bool(reading))
         self.upload_act.setText(f"Upload approved ({len(self._approved())})")
 
     def closeEvent(self, event):  # noqa: N802
@@ -1019,6 +1048,8 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.pool.clear()
+        recognize.cancel_all()  # running claude processes would otherwise outlive the app
+        self.pool.waitForDone(5000)
         self.render_pool.clear()
         self.render_pool.waitForDone(2000)  # a page render takes well under a second
         event.accept()

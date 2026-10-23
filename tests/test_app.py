@@ -319,8 +319,10 @@ def test_page_context_menu(window):
     window.page_list.setCurrentRow(1)
     menu = window._page_menu()
     texts = [a.text() for a in menu.actions() if not a.isSeparator()]
-    assert texts == ["Delete page"] and menu.actions()[0].isEnabled()
-    menu.actions()[0].trigger()
+    assert texts == ["Read again with AI", "Delete page"]
+    delete = next(a for a in menu.actions() if a.text() == "Delete page")
+    assert delete.isEnabled()
+    delete.trigger()
     assert window.session.pages[1].deleted
     menu = window._page_menu()  # now also offers restoring
     restore = [a for a in menu.actions() if a.text().startswith("Restore deleted pages (1)")]
@@ -330,7 +332,8 @@ def test_page_context_menu(window):
     window.session.pages[0].wint_receipt_id = 5
     window.session.pages[0].status = PageStatus.UPLOADED
     window.page_list.setCurrentRow(0)
-    assert not window._page_menu().actions()[0].isEnabled()  # uploaded pages can't be deleted
+    actions = {a.text(): a for a in window._page_menu().actions() if not a.isSeparator()}
+    assert not actions["Delete page"].isEnabled() and not actions["Read again with AI"].isEnabled()  # uploaded
 
 
 def test_payment_method_prefilled_for_saved_drafts(qtbot, monkeypatch, sample_pdf):
@@ -559,3 +562,37 @@ def test_address_book_add_edit_remove(qtbot, monkeypatch):
     assert FakeClient.calls == [("add", "Ada", "Analytical AB"), ("replace", 501, "Ada Lovelace", "Analytical AB"),
                                 ("remove", 1)]
     assert dlg.changed
+
+
+
+def test_read_again_from_menu_and_busy_indicator(qtbot, monkeypatch, sample_pdf):
+    import threading
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30))
+    gate = threading.Event()
+    calls = []
+
+    def slow(png, categories, **kw):
+        calls.append(1)
+        gate.wait(5)
+        return recognize.RecognitionResult(rec_for(0), 0.01)
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", slow)
+    w = mw.MainWindow(Settings(parallel_recognitions=3))
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", REF)
+    w.open_pdf(sample_pdf)
+    assert w.ai_busy.isVisibleTo(w) and "AI is reading 3 pages" in w.ai_busy_label.text()
+    gate.set()
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    assert not w.ai_busy.isVisibleTo(w)
+    gate.clear()
+    w.page_list.setCurrentRow(0)
+    read = next(a for a in w._page_menu().actions() if "with AI" in a.text())
+    assert read.text() == "Read again with AI" and read.isEnabled()
+    read.trigger()
+    assert w.session.pages[0].status is PageStatus.RECOGNIZING and "1 page…" in w.ai_busy_label.text()
+    gate.set()
+    qtbot.waitUntil(lambda: w.session.pages[0].status is not PageStatus.RECOGNIZING, timeout=10000)
+    assert len(calls) == 4

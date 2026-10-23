@@ -61,6 +61,8 @@ QListWidget#pages {{ border: none; }}
 QListWidget#pages::item {{ padding: 6px 4px; }}
 QListWidget#pages::item:selected {{ background: {ACCENT}; color: {TEXT_ON_ACCENT}; }}
 QSplitter::handle {{ background: {BORDER}; }}
+QProgressBar {{ background: {SURFACE_BASE}; border: 1px solid {BORDER}; border-radius: 3px; }}
+QProgressBar::chunk {{ background: {ACCENT}; border-radius: 2px; }}
 QToolBar {{
     background: {SURFACE_WINDOW}; border: none; border-bottom: 1px solid {BORDER};
     padding: 4px 6px; spacing: 2px;
