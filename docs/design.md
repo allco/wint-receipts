@@ -39,7 +39,9 @@ The window has a toolbar, three panes side by side, and a status bar.
   preview/upload · reload/settings. Image controls live with the image, not in the toolbar.
 - The **status bar** shows the company name, page counts by status, the AI cost so far, and
   whether uploads are on. When pages have been deleted, a *Restore deleted pages (N)* link appears on
-  its left.
+  its left. While AI reads pages, it shows an activity bar and *AI is reading N pages…*. While
+  receipts are uploading, it shows a progress bar, *Uploading 2 of 3 · page 2…* and a *Cancel* link.
+  *Cancel* stops the queue after the receipt being sent, so no upload is cut off halfway.
 
 ## Screens and states
 
@@ -49,10 +51,13 @@ The window has a toolbar, three panes side by side, and a status bar.
 | AI reading | Row shows "AI reading" | The scan | "Claude AI is reading this receipt…" |
 | Failed / not read yet | Red or grey dot | The scan | Reason, plus *Read with AI* |
 | Review | Row summary | The scan | The editable form |
+| Uploading | Blue dot, then the slate ✓ dot and *☁ Wint #id* | The scan | Read-only form |
 
 ![Empty state](design/01-empty.png)
 
 ![AI reading](design/02-recognising.png)
+
+![Uploading](design/04-uploading.png)
 
 ## Colour
 

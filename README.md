@@ -91,7 +91,9 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - Uploaded pages get their own mark: a slate dot with a ✓, and their Wint receipt number.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) attached, as a
    JPEG per page (or a PDF, in Settings). Before creating anything, the app checks Wint for the same
-   `ClientId` and for a receipt with the same date and amount, and asks if it finds one. Every upload
+   `ClientId` and for a receipt with the same date and amount, and asks if it finds one. The status
+   bar shows the progress (*Uploading 2 of 3*) with a *Cancel* link, which stops after the receipt
+   being sent. Every upload
    is written to an upload ledger (`uploads.jsonl` in the settings folder), so uploaded pages stay
    marked as uploaded even if a session file is lost. Uploads can be turned off in Settings. **Preview request** shows the exact JSON that would be sent.
 
