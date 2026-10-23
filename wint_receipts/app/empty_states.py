@@ -4,7 +4,7 @@ Illustrations are small SVGs coloured from the current palette, so they follow l
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QEvent, QRectF, QSize, Qt
+from PySide6.QtCore import QByteArray, QEvent, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
@@ -105,7 +105,7 @@ def svg_pixmap(svg: str, size: QSize, palette: QPalette, ratio: float = 1.0) -> 
     return pix
 
 
-def status_dot(color: str, diameter: int = 12) -> QIcon:
+def status_dot(color: str, diameter: int = 12, check: bool = False) -> QIcon:
     pix = QPixmap(diameter * 2, diameter * 2)
     pix.setDevicePixelRatio(2)
     pix.fill(Qt.GlobalColor.transparent)
@@ -114,6 +114,11 @@ def status_dot(color: str, diameter: int = 12) -> QIcon:
     p.setBrush(QColor(color))
     p.setPen(QPen(QColor("white"), 1.5))  # keeps the dot visible on a selected (highlighted) row
     p.drawEllipse(QRectF(1, 1, diameter - 2, diameter - 2))
+    if check:
+        p.setPen(QPen(QColor("white"), max(1.4, diameter / 8), Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        d = diameter
+        p.drawPolyline([QPointF(d * 0.30, d * 0.52), QPointF(d * 0.45, d * 0.67), QPointF(d * 0.72, d * 0.37)])
     p.end()
     return QIcon(pix)
 

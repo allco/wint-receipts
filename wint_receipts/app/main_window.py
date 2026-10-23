@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
             width_em=8)
         for s in (PageStatus.NEEDS_REVIEW, PageStatus.APPROVED, PageStatus.UPLOADED, PageStatus.SKIPPED,
                   PageStatus.FAILED):
-            self.list_empty.add_row(STATUS_LABELS[s], icon=es.status_dot(STATUS_COLORS[s], 16))
+            self.list_empty.add_row(STATUS_LABELS[s], icon=es.status_dot(STATUS_COLORS[s], 16, s is PageStatus.UPLOADED))
         self.image_empty = es.EmptyState(
             es.RECEIPTS_SVG, "Open a PDF of scanned receipts",
             "Drag a PDF onto this window, or click <b>Open PDF</b>. Each page should hold one receipt.",
@@ -444,7 +444,8 @@ class MainWindow(QMainWindow):
         if p.wint_receipt_id is not None:
             detail += f"  ·  ☁ Wint #{p.wint_receipt_id}"
         item.setText(f"{index + 1}.  {detail}")
-        item.setIcon(es.status_dot(STATUS_COLORS[p.status]))
+        item.setIcon(es.status_dot(STATUS_COLORS[p.status], 14 if p.status is PageStatus.UPLOADED else 12,
+                                   check=p.status is PageStatus.UPLOADED))
         dim = p.status is PageStatus.SKIPPED or owner is not None
         item.setForeground(QBrush(self.palette().color(
             QPalette.ColorRole.PlaceholderText if dim else QPalette.ColorRole.Text)))

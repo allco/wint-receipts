@@ -30,12 +30,12 @@ STATUS = {
     PageStatus.APPROVED: "#43A047",
     PageStatus.SKIPPED: "#757575",
     PageStatus.UPLOADING: "#1E88E5",
-    PageStatus.UPLOADED: "#2E7D32",
+    PageStatus.UPLOADED: "#455A64",
     PageStatus.FAILED: "#E53935",
 }
 WARNING_TEXT = STATUS[PageStatus.NEEDS_REVIEW]
 ERROR_TEXT = STATUS[PageStatus.FAILED]
-OK_TEXT = STATUS[PageStatus.UPLOADED]
+OK_TEXT = "#2E7D32"
 
 STYLE_SHEET = f"""
 QPushButton {{
