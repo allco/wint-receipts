@@ -123,14 +123,14 @@ def test_first_payment_method_preselected_when_several(qtbot, monkeypatch):
 
 
 def test_recognition_log(window, tmp_path):
-    lines = [json.loads(x) for x in (tmp_path / "recognition.log").read_text().splitlines()]
+    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
     assert [e["event"] for e in lines] == ["recognized"] * 3
     assert lines[0]["page"] == 1 and lines[0]["cost_usd"] == 0.01 and lines[0]["recognition"]["total"] == 44.85
     window.page_list.setCurrentRow(0)
     window.form.currency.setText("EUR")
     window.form.currency.textEdited.emit("EUR")
     window._approve()
-    approved = json.loads((tmp_path / "recognition.log").read_text().splitlines()[-1])
+    approved = json.loads((tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()[-1])
     assert approved["event"] == "approved" and approved["changed"] == ["currency"]
     assert approved["final"]["currency"] == "EUR" and approved["uncertain"] == ["total"]
 
@@ -148,7 +148,7 @@ def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
     qtbot.addWidget(w)
     w.open_pdf(sample_pdf)
     qtbot.waitUntil(lambda: all(p.status is PageStatus.FAILED for p in w.session.pages), timeout=10000)
-    lines = [json.loads(x) for x in (tmp_path / "recognition.log").read_text().splitlines()]
+    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
     assert {e["event"] for e in lines} == {"failed"} and "timed out" in lines[0]["error"]
 
 
@@ -166,7 +166,7 @@ def test_recognition_log_off(qtbot, monkeypatch, sample_pdf, tmp_path):
     w.page_list.setCurrentRow(0)
     w._approve()
     assert w.session.pages[0].status is PageStatus.APPROVED
-    assert not (tmp_path / "recognition.log").exists()
+    assert not (tmp_path / "cache" / "wint-receipts" / "recognition.log").exists()
 
 
 def test_font_scale_applies_live_and_cancel_reverts(qtbot):

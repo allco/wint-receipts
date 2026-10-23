@@ -383,8 +383,8 @@ def test_changed_fields():
 
 def test_logs_enabled_by_default_and_can_be_turned_off(tmp_path):
     s = Settings()
-    assert s.request_log_path() == tmp_path / "wint-requests.log"
-    assert s.recognition_log_path() == tmp_path / "recognition.log"
+    assert s.request_log_path() == tmp_path / "cache" / "wint-receipts" / "wint-requests.log"
+    assert s.recognition_log_path() == tmp_path / "cache" / "wint-receipts" / "recognition.log"
     off = Settings(request_log_enabled=False, recognition_log_enabled=False)
     assert off.request_log_path() is None and off.recognition_log_path() is None
 
@@ -402,12 +402,11 @@ def test_config_dir_per_platform(monkeypatch, tmp_path, platform, expected):
     assert config.config_dir().as_posix().endswith(expected)
 
 
-def test_frozen_app_logs_to_data_dir_on_windows(monkeypatch, tmp_path):
-    monkeypatch.setattr(config.sys, "platform", "win32")
-    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
-    assert config.default_log_dir() == config.config_dir() / "logs"
+def test_logs_go_to_cache_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.setattr(config.sys, "platform", "linux")
-    assert config.default_log_dir() == tmp_path  # Linux keeps the start folder (cwd)
+    monkeypatch.setattr(config.Path, "home", lambda: tmp_path)
+    assert config.default_log_dir() == tmp_path / ".cache" / "wint-receipts"
 
 
 def test_render_and_extract_respect_rotation(sample_pdf):

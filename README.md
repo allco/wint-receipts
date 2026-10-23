@@ -290,6 +290,8 @@ Platform notes:
 - **Wint user name and API key.** They're prefilled from `WINT_USER` / `WINT_TOKEN`, and *Fill from
   environment* re-reads them. On save, the key goes into the system keyring, never a file. *Test
   connection* makes a read-only `GET /api/Auth`.
+- **Logs** live in the cache folder by default: `~/.cache/wint-receipts` on Linux,
+  `~/Library/Caches/wint-receipts` on macOS, `%LOCALAPPDATA%\wint-receipts\cache` on Windows.
 - **Request log** (on by default): every Wint request is appended as a JSON line to `wint-requests.log`.
 - **Recognition log** (on by default): `recognition.log`, one JSON event per line:
   - `recognized`: page, model, DPI, seconds, cost, tokens, and the full recognised fields.

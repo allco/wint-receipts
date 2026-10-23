@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 @pytest.fixture(autouse=True)
 def isolated_env(tmp_path, monkeypatch):
     """Keep tests away from the real config, cache, keyring and credentials."""
-    monkeypatch.chdir(tmp_path)  # default log paths are relative to the working directory
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.delenv("WINT_USER", raising=False)

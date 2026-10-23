@@ -49,17 +49,12 @@ def ledger_path() -> Path:
 
 
 def default_log_dir() -> Path:
-    """Where logs go by default: the start folder, except for a packaged app on Windows/macOS,
-    which is usually started by double-click with an arbitrary working directory."""
-    if getattr(sys, "frozen", False) and sys.platform in ("win32", "darwin"):
-        return config_dir() / "logs"
-    return Path.cwd()
+    return cache_dir()
 
 
 class Settings(BaseModel):
     wint_base_url: str = "https://api.wint.se"
     wint_user: str = ""  # company id; the key itself is in the keyring
-    # Logs default to the start folder (see default_log_dir).
     request_log: str = Field(default_factory=lambda: str(default_log_dir() / "wint-requests.log"))
     recognition_log: str = Field(default_factory=lambda: str(default_log_dir() / "recognition.log"))
     request_log_enabled: bool = True
