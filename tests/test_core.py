@@ -426,3 +426,29 @@ def test_representation_needs_reason_sent_as_intent():
     assert not checks.blocking(checks.check(ok, ref, today=date(2026, 10, 21)))
     assert receipt_post_body(ok, b"%PDF", "cid", "a.pdf")["Intent"] == "collaboration discussion"
     assert receipt_post_body(good_draft(), b"%PDF", "cid", "a.pdf")["Intent"] is None
+
+
+def test_address_book_writes(tmp_path):
+    calls = []
+
+    def handler(req):
+        calls.append((req.method, req.url.path, json.loads(req.content) if req.content else None))
+        return httpx.Response(200, json=901 if req.method == "POST" else None)
+
+    client, log = make_client(handler, tmp_path, allow_writes=True)
+    assert client.add_person("Ada", "Analytical AB") == 901
+    assert client.replace_person(55, "Ada L", "Analytical AB") == 901
+    assert calls == [
+        ("POST", "/api/Receipt/AddReceiptPerson", {"Id": 0, "Name": "Ada", "Company": "Analytical AB"}),
+        ("POST", "/api/Receipt/AddReceiptPerson", {"Id": 0, "Name": "Ada L", "Company": "Analytical AB"}),
+        ("DELETE", "/api/Receipt/RemoveReceiptPerson/55", None),
+    ]
+    assert [e["method"] for e in log_lines(log)] == ["POST", "POST", "DELETE"]
+
+
+def test_address_book_writes_refused_without_permission(tmp_path):
+    client, _ = make_client(lambda req: pytest.fail("must not send"), tmp_path)
+    with pytest.raises(WriteNotAllowed):
+        client.add_person("Ada", "")
+    with pytest.raises(WriteNotAllowed):
+        client.remove_person(1)

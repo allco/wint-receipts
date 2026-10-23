@@ -160,6 +160,22 @@ class WintClient:
         resp = self.request("POST", "/api/Receipt", json_body=body, note=f"create receipt client_id={client_id}")
         return int(resp.json())
 
+    def add_person(self, name: str, company: str) -> int:
+        """Add someone to the receipt address book; returns their new id."""
+        resp = self.request("POST", "/api/Receipt/AddReceiptPerson", note=f"address book: add {name}",
+                            json_body={"Id": 0, "Name": name, "Company": company})
+        return int(resp.json())
+
+    def remove_person(self, person_id: int, name: str = "") -> None:
+        self.request("DELETE", f"/api/Receipt/RemoveReceiptPerson/{person_id}",
+                     note=f"address book: remove {name or person_id}")
+
+    def replace_person(self, person_id: int, name: str, company: str) -> int:
+        """Wint has no edit: add the corrected entry first, then remove the old one, so a failure loses nothing."""
+        new_id = self.add_person(name, company)
+        self.remove_person(person_id, name)
+        return new_id
+
 
 def _person(p: dict) -> Person:
     return Person(id=p["Id"], name=(p.get("Name") or "").strip(), company=(p.get("Company") or "").strip())
