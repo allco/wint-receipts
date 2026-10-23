@@ -90,8 +90,7 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    JPEG per page (or a PDF, in Settings). Before creating anything, the app checks Wint for the same
    `ClientId` and for a receipt with the same date and amount, and asks if it finds one. Every upload
    is written to an upload ledger (`uploads.jsonl` in the settings folder), so uploaded pages stay
-   marked as uploaded even if a session file is lost. **Uploads are off by default**; turn them on in
-   Settings. **Preview request** shows the exact JSON that would be sent.
+   marked as uploaded even if a session file is lost. Uploads can be turned off in Settings. **Preview request** shows the exact JSON that would be sent.
 
 Review state is saved next to the PDF as `<file>.pdf.wint.json`, so you can close the app and
 continue later. Every receipt has a stable `ClientId`, and the uploader checks it before creating
@@ -207,6 +206,17 @@ Windows:
 $env:WINT_USER = "<company id>"; $env:WINT_TOKEN = "<api key uuid>"
 .venv\Scripts\wint-receipts
 ```
+
+## Command line
+
+```
+wint-receipts [PDF]        open the app, optionally with a PDF of scanned receipts
+wint-receipts --help
+wint-receipts --version
+```
+
+Relative paths are resolved from the current folder. A missing file, or one that isn't a PDF, is
+reported on the terminal and the app doesn't start.
 
 ## Download a release
 

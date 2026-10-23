@@ -22,6 +22,7 @@ def main() -> int:
         "--name", NAME,
         "--collect-data", "pypdfium2_raw",
         "--collect-binaries", "pypdfium2_raw",
+        "--copy-metadata", "wint-receipts",
     ]
     if sys.platform == "darwin":
         # A one-folder .app bundle; one-file .app bundles are deprecated in PyInstaller.
