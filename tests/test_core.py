@@ -85,15 +85,48 @@ def test_schema_and_model_agree():
 def test_recognize_png_runs_cli(monkeypatch):
     seen = {}
 
-    def fake_run(cmd, cwd, **kw):
-        seen["cwd"] = cwd
-        from pathlib import Path
-        assert (Path(cwd) / "page.png").read_bytes() == b"PNG"
-        assert "page.png" in kw["input"]  # prompt passed on stdin
-        return type("P", (), {"returncode": 0, "stdout": json.dumps(CLI_OK), "stderr": ""})()
+    class FakeProc:
+        returncode = 0
 
-    monkeypatch.setattr(recognize.subprocess, "run", fake_run)
+        def __init__(self, cmd, cwd, **kw):
+            from pathlib import Path
+            assert (Path(cwd) / "page.png").read_bytes() == b"PNG"
+            seen["cwd"] = cwd
+
+        def communicate(self, prompt=None, timeout=None):
+            assert "page.png" in prompt  # prompt passed on stdin
+            assert recognize._running  # registered while it runs, so quitting can stop it
+            return json.dumps(CLI_OK), ""
+
+    monkeypatch.setattr(recognize.subprocess, "Popen", FakeProc)
     assert recognize.recognize_png(b"PNG", []).recognition.total == 44.85
+    assert not recognize._running
+
+
+def test_cancel_all_stops_a_running_reading(tmp_path, monkeypatch):
+    import sys
+    import threading
+    import time
+    script = tmp_path / "slow_claude.py"
+    script.write_text("import time; time.sleep(60)")
+    monkeypatch.setattr(recognize, "build_command", lambda path, model: [sys.executable, str(script)])
+    errors = []
+    t = threading.Thread(target=lambda: errors.append(_try(lambda: recognize.recognize_png(b"PNG", []))))
+    t.start()
+    for _ in range(100):
+        if recognize._running:
+            break
+        time.sleep(0.05)
+    recognize.cancel_all()
+    t.join(10)
+    assert not t.is_alive() and isinstance(errors[0], recognize.RecognitionError) and "stopped" in str(errors[0])
+
+
+def _try(fn):
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        return e
 
 
 # ---- checks

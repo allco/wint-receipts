@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -73,6 +74,18 @@ Rules:
 
 class RecognitionError(RuntimeError):
     pass
+
+
+_running: set[subprocess.Popen] = set()
+_running_lock = threading.Lock()
+
+
+def cancel_all() -> None:
+    """Stop every claude process still running, e.g. when the app quits mid-reading."""
+    with _running_lock:
+        procs = list(_running)
+    for proc in procs:
+        proc.kill()
 
 
 @dataclass
@@ -154,14 +167,25 @@ def recognize_png(
         cmd = build_command(resolve_claude(claude_path), model)
         start = time.monotonic()
         try:
-            proc = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, encoding="utf-8",
-                                  timeout=timeout, input=build_prompt(image.name, categories, learnings))
+            proc = subprocess.Popen(cmd, cwd=tmp, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, encoding="utf-8")
         except FileNotFoundError as e:
             raise RecognitionError(f"claude CLI not found at {claude_path!r}") from e
+        with _running_lock:
+            _running.add(proc)
+        try:
+            stdout, stderr = proc.communicate(build_prompt(image.name, categories, learnings), timeout=timeout)
         except subprocess.TimeoutExpired as e:
+            proc.kill()
+            proc.communicate()
             raise RecognitionError(f"claude timed out after {timeout:.0f}s") from e
-    if proc.returncode != 0 and not proc.stdout.strip():
-        raise RecognitionError(f"claude exited {proc.returncode}: {proc.stderr.strip()[:300]}")
-    result = parse_output(proc.stdout)
+        finally:
+            with _running_lock:
+                _running.discard(proc)
+    if proc.returncode < 0:
+        raise RecognitionError("reading was stopped")
+    if proc.returncode != 0 and not stdout.strip():
+        raise RecognitionError(f"claude exited {proc.returncode}: {stderr.strip()[:300]}")
+    result = parse_output(stdout)
     result.seconds = round(time.monotonic() - start, 2)
     return result
