@@ -59,6 +59,24 @@ The window has a toolbar, three panes side by side, and a status bar.
 
 ![Uploading](design/04-uploading.png)
 
+## Wint receipts browser
+
+![Wint browser](design/05-browser.png)
+
+A separate window, so it can stay open next to the main one.
+
+- **Toolbar:** *Refresh* (F5, skips the cache), a search field for the loaded receipts, and how old
+  the cached list is.
+- **Filter bar:** date range, state, category, payment, amount. Changes apply after 0.4 s, without
+  a button. *Clear filters* resets them all.
+- **Table:** Nr, Date, Amount (bold, right-aligned), Cur, Category, Payment method, State (with a
+  dot: slate for booked, grey for received, amber for sent back, red for cancelled), Paid, Files.
+  Only the columns Wint can sort by react to a header click.
+- **Preview:** the receipt's details above its attachment, with the image bar (no rotation here).
+  When an attachment has several pages, a picker appears above the image.
+- **Loading:** an activity bar with *Loading receipts…* or *Loading more…* in the status bar, and
+  *Loading attachment…* in place of the image.
+
 ## Colour
 
 The palette is light only. All colours come from `theme.py`, and those values match the design

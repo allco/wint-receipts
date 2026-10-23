@@ -101,6 +101,23 @@ Review state is saved next to the PDF as `<file>.pdf.wint.json`, so you can clos
 continue later. Every receipt has a stable `ClientId`, and the uploader checks it before creating
 anything, so a retried upload doesn't create duplicates.
 
+### Browse what's already in Wint
+
+**Wint receipts** (toolbar, Ctrl+B) opens a window with every receipt in your Wint company.
+
+![Receipts in Wint: a filterable table and a preview of the selected receipt](docs/design/05-browser.png)
+
+- **Filters** run in Wint: date range, state, category, paid or unpaid, and amount from/to.
+  **Search** looks through the receipts already loaded (number, amount, category, people, comment).
+- **Sorting:** click a column header. Wint sorts by number, date, amount, category and state; the
+  other columns can't be sorted.
+- **Paging:** 100 receipts at a time; scrolling to the bottom loads the next 100.
+- **Preview:** the selected receipt's details and its attachment, every page of it.
+- **Cache:** lists are cached for 10 minutes and attachments for good, in the temp folder
+  (`/tmp/wint-receipts-<uid>` on Linux). **Refresh** (F5) skips the cache.
+- A progress bar in the status bar shows while receipts load, and the preview shows one while an
+  attachment loads.
+
 The layout, colours, type, icons, components and interactions are described in
 [docs/design.md](docs/design.md).
 
@@ -382,6 +399,7 @@ wint_receipts/core/    UI-free logic
   reclog.py            recognition log
   learnings.py         AI learnings file: parse, apply, learn
   config.py            settings + credentials (env → keyring)
+  browse.py            receipts in Wint: query, paging, temp-folder cache
 wint_receipts/app/     PySide6 UI
   main_window.py       page list | page image | receipt form
   receipt_form.py      editable fields and actions
@@ -389,6 +407,7 @@ wint_receipts/app/     PySide6 UI
   theme.py, icons.py   design colours and the app's own icons
   fonts.py             live font scaling
   image_view.py        zoomable page view + rotate/zoom bar
+  browser.py           the Wint receipts browser window
   settings_dialog.py, workers.py
 tests/                 pytest + pytest-qt
 scripts/build.py, build-binary.sh, smoke_test.py

@@ -245,6 +245,18 @@ variants), and the company info from `GET /api/Auth`.
 
 ### Query receipts
 
+What the browser found out (read-only GETs, 2026-10-24):
+
+- `States` takes the **names** (`States=Booked`); `States=0` matches nothing.
+- `CreatedFromDate` / `CreatedToDate` filter on the receipt date (`DateTime`), not on when it was uploaded.
+- `OrderByProperty` works with `DateTime`, `Amount`, `SerialNumber`, `LastUpdated`, `CategoryName` and `State`.
+  `SupplierName` is accepted but is null on our receipts, so it doesn't sort. An unknown property
+  returns an error.
+- `IncludeSummary=true` returns only the summary: `Items` is null.
+- `PaymentState=Paid` / `Unpaid` works. `PaidOut` is true on unpaid receipts too, so use `PaymentState`.
+- List items carry `Attachments` with `Id` and `ContentType` but no `Data`.
+  `GET /api/Receipt/{id}/Attachments/{attachmentId}` returns JSON, `{"Data": "<base64>", ...}`, not raw bytes.
+
 `GET /api/Receipt` takes filters such as `State`/`States`, `CreatedFromDate`/`CreatedToDate`,
 `AmountFrom`/`AmountTo`, `Currency`, `PaymentState` (`Unpaid`/`Paid`), `LastUpdated` (for
 incremental sync), `ClientId`, `Dimensions`, `SerialNumberFrom`/`To`, `PaymentMethods`,
