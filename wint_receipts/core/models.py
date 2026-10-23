@@ -76,6 +76,8 @@ class ReceiptDraft(BaseModel):
     vat: list[VatLine] = Field(default_factory=list)
     persons: list[Person] = Field(default_factory=list)  # participants of a representation receipt
     intent: str = ""  # the reason for a representation receipt (Wint's ReceiptPost.Intent)
+    participants_suggested: bool = False  # pre-ticked by the app; approving accepts them
+    participants_reviewed: bool = False  # the user confirmed or changed them; don't suggest again
     # Pages of the source PDF attached to this receipt (0-based). Normally just the page itself;
     # continuation pages get merged into the receipt before them.
     pages: list[int] = Field(default_factory=list)

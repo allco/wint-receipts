@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
-from .models import ReceiptDraft, Recognition, ReferenceData
+from .models import ME_ID, ReceiptDraft, Recognition, ReferenceData
 
 SWEDISH_VAT_RATES = {0.0, 6.0, 12.0, 25.0}
 TOLERANCE = 0.02
@@ -71,6 +71,9 @@ def check(
     if category and is_representation(category.name) and len(draft.persons) < MIN_PARTICIPANTS:
         err("persons", f"Representation needs at least {MIN_PARTICIPANTS} participants "
                        f"({len(draft.persons)} so far)")
+    if category and is_representation(category.name) and draft.participants_suggested:
+        names = ", ".join(p.name for p in draft.persons if p.id != ME_ID) or "nobody"
+        warn("persons", f"Participants suggested ({names}) — check who was there before approving")
     if category and is_representation(category.name) and not draft.intent.strip():
         err("intent", "Representation needs a reason")
 

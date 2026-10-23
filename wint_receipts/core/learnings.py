@@ -27,12 +27,17 @@ HEADER = """\
 #       → receipts from that supplier get that category, whatever the AI suggests
 #   supplier: "<as the AI read it>" = "<correct name>"
 #       → the supplier name is corrected
+#   participants: "<supplier>" (org <org number>) = "<name>" [<id>], ...
+#       → suggested as the guests on the next representation receipt from that supplier
 #   any other line → passed to the AI as a hint, e.g.: Receipts from Mr Wok are Representation.
 """
 
 _CATEGORY = re.compile(
     r'^category:\s*"(?P<supplier>[^"]*)"\s*(?:\(org\s*(?P<org>[^)]*)\))?\s*=\s*"(?P<name>[^"]*)"\s*\[(?P<id>\d+)\]')
 _SUPPLIER = re.compile(r'^supplier:\s*"(?P<read>[^"]*)"\s*=\s*"(?P<correct>[^"]*)"')
+_PARTICIPANTS = re.compile(
+    r'^participants:\s*"(?P<supplier>[^"]*)"\s*(?:\(org\s*(?P<org>[^)]*)\))?\s*=\s*(?P<people>.*?)\s*(?:#.*)?$')
+_PERSON = re.compile(r'"(?P<name>[^"]*)"\s*\[(?P<id>\d+)\]')
 _COMPANY_SUFFIX = re.compile(r"\b(ab|aktiebolag|hb|kb|ltd|inc|oy|as|a/s|gmbh)\b\.?", re.I)
 
 _lock = threading.Lock()
@@ -103,7 +108,8 @@ class Learnings:
     def hints(self) -> list[str]:
         return [l.strip() for l in self.lines
                 if l.strip() and not l.lstrip().startswith("#")
-                and not _CATEGORY.match(l.strip()) and not _SUPPLIER.match(l.strip())]
+                and not _CATEGORY.match(l.strip()) and not _SUPPLIER.match(l.strip())
+                and not _PARTICIPANTS.match(l.strip())]
 
     def prompt_section(self) -> str:
         """Text for the AI prompt: the user's corrections and hints, most recent last."""
@@ -138,6 +144,24 @@ class Learnings:
                f' = "{category_name}" [{category_id}]   # learned {date.today().isoformat()}'
         key, okey = supplier_key(supplier), org_key(org)
         self._replace_or_append(line, lambda l: (m := _CATEGORY.match(l.strip())) is not None and (
+            (okey and org_key(m["org"]) == okey) or supplier_key(m["supplier"]) == key))
+        return line
+
+    def participants_for(self, supplier: str | None, org: str | None) -> list[tuple[int, str]]:
+        """Guests last approved for this supplier, as (address-book id, name)."""
+        key, okey = supplier_key(supplier), org_key(org)
+        for line in reversed(self.lines):
+            m = _PARTICIPANTS.match(line.strip())
+            if m and ((okey and org_key(m["org"]) == okey) or (key and supplier_key(m["supplier"]) == key)):
+                return [(int(p["id"]), p["name"]) for p in _PERSON.finditer(m["people"])]
+        return []
+
+    def learn_participants(self, supplier: str, org: str | None, people: list[tuple[int, str]]) -> str:
+        names = ", ".join(f'"{name}" [{pid}]' for pid, name in people)
+        line = f'participants: "{supplier}"' + (f" (org {org})" if org else "") + \
+               f" = {names}   # learned {date.today().isoformat()}"
+        key, okey = supplier_key(supplier), org_key(org)
+        self._replace_or_append(line, lambda l: (m := _PARTICIPANTS.match(l.strip())) is not None and (
             (okey and org_key(m["org"]) == okey) or supplier_key(m["supplier"]) == key))
         return line
 
