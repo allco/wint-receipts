@@ -76,9 +76,10 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - The form shows only what goes to Wint: date, amount (in **bold**), currency, category and payment
      method.
    - **Representation** receipts get a **Participants** field: tick who took part, from the people
-     you've registered in Wint (Wint's receipt address book, most used first, with search). At least
-     **2 participants** are required before the receipt can be approved. They're sent to Wint in the
-     receipt's `Persons` field.
+     you've registered in Wint (Wint's receipt address book, most used first, with search). You are
+     added automatically, so one guest is enough for the required **2 participants**. They're sent to
+     Wint in the receipt's `Persons` field. A **Reason** field, prefilled with "collaboration
+     discussion", is sent as `Intent`.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF

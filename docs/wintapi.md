@@ -128,6 +128,10 @@ Personalrepresentation categories had their participants there. The account hold
 too, but isn't in the address book, so Wint may add them itself. Creating receipts with `Persons` hasn't
 been tested yet.
 
+**The representation reason goes in `Intent`** (`ReceiptPost.Intent`, undocumented in the spec).
+Verified from history: 195 of 200 representation receipts had `Intent` = "collaboration discussion";
+`Comment` was empty.
+
 ### Create / update return ids
 
 `POST` (create) and `PUT /{id}` (update) usually return the entity id as a bare `integer`
