@@ -13,8 +13,12 @@ def attachment_name(pdf_path: Path, pages: list[int]) -> str:
     return f"{pdf_path.stem}-{span}.pdf"
 
 
-def upload_page(client: WintClient, pdf_path: Path, page: PageState) -> int:
-    """Create the receipt in Wint and return its id. Idempotent per page.client_id."""
+def upload_page(client: WintClient, pdf_path: Path, page: PageState,
+                rotations: dict[int, int] | None = None) -> int:
+    """Create the receipt in Wint and return its id. Idempotent per page.client_id.
+
+    `rotations` maps page index → clockwise turn chosen in the app; the attachment is turned to match.
+    """
     if page.draft is None:
         raise ValueError("page has no reviewed draft")
     if page.status is not PageStatus.APPROVED:
@@ -24,5 +28,5 @@ def upload_page(client: WintClient, pdf_path: Path, page: PageState) -> int:
     if existing:
         return int(existing[0]["Id"])
     pages = page.draft.pages or [page.index]
-    data = pdf.extract_pages(pdf_path, pages)
+    data = pdf.extract_pages(pdf_path, pages, rotations)
     return client.create_receipt(page.draft, data, page.client_id, attachment_name(pdf_path, pages))

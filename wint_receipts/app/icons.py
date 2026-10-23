@@ -21,6 +21,14 @@ SVGS = {
     "recognise": '<path d="M3.5 3.5h9v17l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1-1.5 1z"/><path d="M6.5 8h3M6.5 11h3M6.5 14h2"/>'
                  '<path d="M17.5 8.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3-3.3-1.2 3.3-1.2z" fill="{accent}" stroke="{accent}" stroke-width="1"/>'
                  '<path d="M19.5 3l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="{accent}" stroke="{accent}" stroke-width="0.8"/>',
+    # page with a curved arrow, turning counter-clockwise / clockwise
+    "rotate-left": '<rect x="9" y="9" width="11" height="11" rx="1.5"/>'
+                   '<path d="M4 13V9a5 5 0 0 1 5-5h4" stroke="{accent}"/><path d="M10.5 1.5L13 4l-2.5 2.5" stroke="{accent}"/>',
+    "rotate-right": '<rect x="4" y="9" width="11" height="11" rx="1.5"/>'
+                    '<path d="M20 13V9a5 5 0 0 0-5-5h-4" stroke="{accent}"/><path d="M13.5 1.5L11 4l2.5 2.5" stroke="{accent}"/>',
+    # magnifier with plus / minus
+    "zoom-in": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5"/><path d="M10.5 7.5v6M7.5 10.5h6" stroke="{accent}"/>',
+    "zoom-out": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5"/><path d="M7.5 10.5h6" stroke="{accent}"/>',
     "previous": '<path d="M14.5 6l-6 6 6 6"/>',
     "next": '<path d="M9.5 6l6 6-6 6"/>',
     # corners pointing outward around a page

@@ -20,7 +20,7 @@ from ..core.wint import WintClient, receipt_post_body
 from . import empty_states as es
 from . import icons as app_icons
 from . import theme
-from .image_view import ImageView
+from .image_view import ImagePane
 from .receipt_form import ReceiptForm, format_amount
 from .settings_dialog import SettingsDialog
 from .workers import Job
@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.session: Session | None = None
         self.reference: ReferenceData | None = self._load_cached_reference()
-        self._display_cache: dict[int, bytes] = {}
+        self._display_cache: dict[tuple[int, int], bytes] = {}  # (page, rotation) → PNG
         self._jobs: set[Job] = set()  # keep Python refs until the signals fire
         self._upload_queue: list[int] = []
         self._reference_loading = False
@@ -70,7 +70,9 @@ class MainWindow(QMainWindow):
         self.page_list.currentRowChanged.connect(self._show_page)
         self.page_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.page_list.customContextMenuRequested.connect(self._show_page_menu)
-        self.image = ImageView()
+        self.image_pane = ImagePane()
+        self.image_pane.rotate_requested.connect(self._rotate)
+        self.image = self.image_pane.view
         self.image.setAcceptDrops(False)  # let PDF drops reach the window
         self.image.viewport().setAcceptDrops(False)
         self.form = ReceiptForm()
@@ -85,7 +87,7 @@ class MainWindow(QMainWindow):
 
         self._build_empty_states()
         self.list_stack = self._stack(self.list_empty, self.page_list)
-        self.image_stack = self._stack(self.image_empty, self.image)
+        self.image_stack = self._stack(self.image_empty, self.image_pane)
         form_scroll = QScrollArea()
         form_scroll.setWidgetResizable(True)
         form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -216,7 +218,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(tb)
         icons = {
             "Open PDF…": "open", "Read with AI": "recognise", "Previous": "previous", "Next": "next",
-            "Fit image": "fit", "Preview request": "preview", "Upload approved": "upload",
+            "Preview request": "preview", "Upload approved": "upload",
             "Reload Wint data": "reload", "Settings…": "settings",
         }
 
@@ -236,7 +238,6 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         act("Previous", lambda: self._step(-1), "PgUp")
         act("Next", lambda: self._step(1), "PgDown")
-        act("Fit image", self.image.fit, "Ctrl+0")
         tb.addSeparator()
         act("Preview request", self._preview_request, tip="Show the JSON that would be sent to Wint for this page")
         self.upload_act = act("Upload approved", self._upload_approved)
@@ -420,12 +421,8 @@ class MainWindow(QMainWindow):
             self.form.set_page(None, None)
             self._sync_panes()
             return
-        if index not in self._display_cache:
-            try:
-                self._display_cache[index] = pdf.render_png(Path(self.session.pdf_path), index, DISPLAY_DPI)
-            except Exception as e:  # noqa: BLE001
-                self.statusBar().showMessage(f"Could not render page {index + 1}: {e}", 8000)
-        self.image.set_png(self._display_cache.get(index))
+        self._show_image(p)
+        self.image_pane.set_rotation_enabled(p.wint_receipt_id is None and p.status is not PageStatus.UPLOADING)
         if p.draft and p.draft.payment_method_id is None and p.status is not PageStatus.UPLOADED:
             if (default := self._default_payment_method()) is not None:
                 p.draft.payment_method_id = default
@@ -433,6 +430,29 @@ class MainWindow(QMainWindow):
         self.form.set_page(p, self._owner_of(index))
         self._run_checks()
         self._sync_panes()
+
+    def _show_image(self, p: PageState, keep_view: bool = False) -> None:
+        key = (p.index, p.rotation)
+        if key not in self._display_cache:
+            try:
+                self._display_cache[key] = pdf.render_png(Path(self.session.pdf_path), p.index, DISPLAY_DPI, p.rotation)
+            except Exception as e:  # noqa: BLE001
+                self.statusBar().showMessage(f"Could not render page {p.index + 1}: {e}", 8000)
+        self.image.set_png(self._display_cache.get(key), keep_view=keep_view)
+
+    def _rotate(self, delta: int) -> None:
+        """Turn the current page; applies to the view, the next AI reading, and the uploaded PDF page."""
+        p = self._page(self._current_index())
+        if p is None or p.wint_receipt_id is not None or p.status is PageStatus.UPLOADING:
+            return
+        p.rotation = (p.rotation + delta) % 360
+        self._show_image(p)
+        self._schedule_save()
+        hint = " — use “Read again with AI” if it was read sideways" if p.recognition else ""
+        self.statusBar().showMessage(f"Page {p.index + 1} turned to {p.rotation}°{hint}", 6000)
+
+    def _rotations(self) -> dict[int, int]:
+        return {q.index: q.rotation for q in self.session.pages if q.rotation} if self.session else {}
 
     def _step(self, delta: int) -> None:
         """Move to the next/previous page that is not deleted."""
@@ -480,11 +500,11 @@ class MainWindow(QMainWindow):
             p.error = None
             self._refresh_item(i)
 
-            def work(i=i):
+            def work(i=i, rotation=p.rotation):
                 context = {"pdf": str(pdf_path), "pdf_sha256": sha, "page": i + 1, "model": s.claude_model,
-                           "dpi": s.recognition_dpi, "categories": len(categories)}
+                           "dpi": s.recognition_dpi, "rotation": rotation, "categories": len(categories)}
                 try:
-                    png = pdf.render_png(pdf_path, i, s.recognition_dpi)
+                    png = pdf.render_png(pdf_path, i, s.recognition_dpi, rotation)
                     res = recognize.recognize_png(png, categories, claude_path=s.claude_path, model=s.claude_model)
                 except Exception as e:
                     _log_quietly(log, {"event": "failed", **context, "error": str(e) or type(e).__name__})
@@ -753,7 +773,7 @@ class MainWindow(QMainWindow):
         if p is None or p.draft is None:
             return
         try:
-            data = pdf.extract_pages(Path(self.session.pdf_path), p.draft.pages or [p.index])
+            data = pdf.extract_pages(Path(self.session.pdf_path), p.draft.pages or [p.index], self._rotations())
             name = upload.attachment_name(Path(self.session.pdf_path), p.draft.pages or [p.index])
             body = receipt_post_body(p.draft, data, p.client_id, name)
         except ValueError as e:
@@ -814,6 +834,7 @@ class MainWindow(QMainWindow):
             self.upload_act.setEnabled(True)
             return
         snapshot = p.model_copy(deep=True)
+        rotations = self._rotations()
         pdf_path = Path(self.session.pdf_path)
         p.status = PageStatus.UPLOADING
         self._after_page_change(index)
@@ -821,7 +842,7 @@ class MainWindow(QMainWindow):
 
         def work():
             try:
-                return upload.upload_page(client, pdf_path, snapshot)
+                return upload.upload_page(client, pdf_path, snapshot, rotations)
             finally:
                 client.close()
 

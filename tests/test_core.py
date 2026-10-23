@@ -354,3 +354,30 @@ def test_frozen_app_logs_to_data_dir_on_windows(monkeypatch, tmp_path):
     assert config.default_log_dir() == config.config_dir() / "logs"
     monkeypatch.setattr(config.sys, "platform", "linux")
     assert config.default_log_dir() == tmp_path  # Linux keeps the start folder (cwd)
+
+
+def test_render_and_extract_respect_rotation(sample_pdf):
+    from PIL import Image
+    upright = Image.open(io.BytesIO(pdf.render_png(sample_pdf, 0, dpi=72)))
+    turned = Image.open(io.BytesIO(pdf.render_png(sample_pdf, 0, dpi=72, rotation=90)))
+    assert (turned.width, turned.height) == (upright.height, upright.width)
+    data = pdf.extract_pages(sample_pdf, [0, 1], {1: 90})
+    doc = pdfium.PdfDocument(io.BytesIO(data))
+    assert [doc[i].get_rotation() for i in range(2)] == [0, 90]
+    doc.close()
+
+
+def test_upload_attaches_rotated_page(tmp_path, sample_pdf):
+    sent = {}
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, json={"Items": []})
+        sent["body"] = json.loads(req.content)
+        return httpx.Response(200, json=7)
+
+    client, _ = make_client(handler, tmp_path, allow_writes=True)
+    upload.upload_page(client, sample_pdf, approved_page(1), {1: 270})
+    doc = pdfium.PdfDocument(io.BytesIO(base64.b64decode(sent["body"]["Attachments"][0]["Data"])))
+    assert doc[0].get_rotation() == 270
+    doc.close()

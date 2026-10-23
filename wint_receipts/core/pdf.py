@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -30,14 +30,14 @@ def page_count(path: Path) -> int:
             pdf.close()
 
 
-def render_png(path: Path, index: int, dpi: int = 200) -> bytes:
-    """Render one page (0-based) to PNG bytes."""
+def render_png(path: Path, index: int, dpi: int = 200, rotation: int = 0) -> bytes:
+    """Render one page (0-based) to PNG bytes, turned clockwise by `rotation` degrees (0/90/180/270)."""
     with _lock:
         pdf = pdfium.PdfDocument(path)
         try:
             page = pdf[index]
             try:
-                image = page.render(scale=dpi / 72).to_pil()
+                image = page.render(scale=dpi / 72, rotation=rotation % 360).to_pil()
             finally:
                 page.close()
         finally:
@@ -47,8 +47,11 @@ def render_png(path: Path, index: int, dpi: int = 200) -> bytes:
     return buf.getvalue()
 
 
-def extract_pages(path: Path, indices: Sequence[int]) -> bytes:
-    """Copy the given pages (0-based, in order) into a new PDF, without re-encoding them."""
+def extract_pages(path: Path, indices: Sequence[int], rotations: Mapping[int, int] | None = None) -> bytes:
+    """Copy the given pages (0-based, in order) into a new PDF, without re-encoding them.
+
+    `rotations` maps a source page index to an extra clockwise turn, set as the page's /Rotate.
+    """
     if not indices:
         raise ValueError("no pages to extract")
     with _lock:
@@ -56,6 +59,11 @@ def extract_pages(path: Path, indices: Sequence[int]) -> bytes:
         dst = pdfium.PdfDocument.new()
         try:
             dst.import_pages(src, list(indices))
+            for pos, index in enumerate(indices):
+                if turn := (rotations or {}).get(index, 0) % 360:
+                    page = dst[pos]
+                    page.set_rotation((page.get_rotation() + turn) % 360)
+                    page.close()
             buf = io.BytesIO()
             dst.save(buf)
             return buf.getvalue()

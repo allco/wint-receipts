@@ -101,6 +101,8 @@ class PageState(BaseModel):
     recognition_cost_usd: float | None = None
     # Removed from the review by the user (the PDF itself is untouched); can be restored.
     deleted: bool = False
+    # Clockwise turn (0/90/180/270) applied when showing, reading and uploading the page; the PDF is untouched.
+    rotation: int = 0
 
 
 class Session(BaseModel):

@@ -27,7 +27,7 @@ def window(qtbot, monkeypatch, sample_pdf):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     calls = []
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
 
     def fake_recognize(png, categories, **kw):
         calls.append(1)
@@ -99,7 +99,7 @@ def test_sole_payment_method_used_and_recognition_waits_for_reference(qtbot, mon
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: setattr(self, "_reference_loading", True))
     monkeypatch.setattr(mw.MainWindow, "_load_cached_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
 
     def fake_recognize(png, categories, **kw):
         seen_categories.append(len(categories))
@@ -144,7 +144,7 @@ def test_recognition_log(window, tmp_path):
 def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
 
     def boom(png, categories, **kw):
         raise recognize.RecognitionError("claude timed out after 300s")
@@ -161,7 +161,7 @@ def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
 def test_recognition_log_off(qtbot, monkeypatch, sample_pdf, tmp_path):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
     monkeypatch.setattr(mw.recognize, "recognize_png",
                         lambda png, categories, **kw: recognize.RecognitionResult(rec_for(0), 0.01))
     w = mw.MainWindow(Settings(parallel_recognitions=1, recognition_log_enabled=False))
@@ -211,7 +211,7 @@ def test_empty_states_and_pane_switching(qtbot, monkeypatch, sample_pdf):
     import threading
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200: real_render(path, index, 30))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
     gate = threading.Event()
 
     def slow(png, categories, **kw):
@@ -346,3 +346,38 @@ def test_payment_method_prefilled_for_saved_drafts(qtbot, monkeypatch, sample_pd
     w.open_pdf(sample_pdf)
     assert [p.draft.payment_method_id for p in w.session.pages] == [1, 1, 1]
     assert w.form.payment.currentData() == 1
+
+
+def test_rotate_page_is_saved_and_used_for_preview(window, sample_pdf):
+    window.page_list.setCurrentRow(0)
+    window.image_pane.rotate_right.trigger()
+    window.image_pane.rotate_right.trigger()
+    window.image_pane.rotate_left.trigger()
+    p = window.session.pages[0]
+    assert p.rotation == 90
+    assert window._rotations() == {0: 90}
+    window._save_now()
+    assert mw.open_session(sample_pdf).pages[0].rotation == 90
+    p.wint_receipt_id, p.status = 5, PageStatus.UPLOADED  # uploaded pages can't be turned any more
+    window._rotate(90)
+    assert p.rotation == 90
+
+
+def test_zoom_controls(window):
+    window.page_list.setCurrentRow(0)
+    pane = window.image_pane
+    pane.actual.trigger()
+    assert pane.zoom_label.text() == "100%"
+    pane.zoom_in.trigger()
+    assert pane.zoom_label.text() == "125%"
+    pane.zoom_out.trigger()
+    pane.zoom_out.trigger()
+    assert pane.zoom_label.text() == "80%"
+    pane.fit.trigger()
+    assert window.image._fit
+
+
+def test_amount_is_bold_also_when_highlighted(window):
+    window.page_list.setCurrentRow(0)  # rec_for marks "total" uncertain → amber highlight on amount
+    style = window.form.amount.styleSheet()
+    assert "font-weight: 700" in style and "background-color" in style

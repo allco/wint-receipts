@@ -65,6 +65,7 @@ QToolBar {{
     background: {SURFACE_WINDOW}; border: none; border-bottom: 1px solid {BORDER};
     padding: 4px 6px; spacing: 2px;
 }}
+QToolBar#imagebar {{ border-bottom: none; border-top: 1px solid {BORDER}; }}
 QToolBar::separator {{ background: {BORDER}; width: 1px; margin: 4px 6px; }}
 QToolBar QToolButton {{
     background: transparent; border: 1px solid transparent; border-radius: 5px;
