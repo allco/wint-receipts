@@ -27,6 +27,7 @@ from . import empty_states as es
 from . import icons as app_icons
 from . import theme
 from .address_book import AddressBookDialog
+from .browser import BrowserWindow
 from .image_view import ImagePane
 from .receipt_form import ReceiptForm, format_amount
 from .settings_dialog import SettingsDialog
@@ -63,6 +64,7 @@ class MainWindow(QMainWindow):
         self._upload_queue: list[int] = []
         self._upload_total = self._upload_done = 0
         self._upload_cancelled = False
+        self._browser: BrowserWindow | None = None
         self._allow_similar: set[str] = set()  # client ids the user chose to upload despite a similar receipt
         self._reference_loading = False
         self._recognize_after_reference = False  # a PDF was opened before the categories arrived
@@ -264,7 +266,7 @@ class MainWindow(QMainWindow):
         self._fit_icons()
         self.addToolBar(tb)
         icons = {
-            "Open PDF…": "open", "Read with AI": "recognise", "Previous": "previous", "Next": "next",
+            "Wint receipts": "browse", "Open PDF…": "open", "Read with AI": "recognise", "Previous": "previous", "Next": "next",
             "Preview request": "preview", "Upload approved": "upload",
             "Address book": "people", "Reload Wint data": "reload", "Settings…": "settings",
         }
@@ -290,6 +292,7 @@ class MainWindow(QMainWindow):
         act("Preview request", self._preview_request, tip="Show the JSON that would be sent to Wint for this page")
         self.upload_act = act("Upload approved", lambda: self._upload_approved())
         tb.addSeparator()
+        act("Wint receipts", self._open_browser, "Ctrl+B", tip="Browse the receipts already in Wint")
         act("Address book", self._open_address_book, tip="Add, edit or remove the people you pick as participants")
         act("Reload Wint data", self._refresh_reference, tip="Reload categories and payment methods from Wint")
         act("Settings…", self._open_settings, "Ctrl+,")
@@ -1158,6 +1161,14 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Upload", f"Page {index + 1} failed to upload; remaining uploads stopped.\n\n{msg}")
 
     # ---- settings
+
+    def _open_browser(self) -> None:
+        if self._browser is not None and isValid(self._browser):
+            self._browser.raise_()
+            self._browser.activateWindow()
+            return
+        self._browser = BrowserWindow(self._client, self.reference, self)
+        self._browser.show()
 
     def _open_address_book(self) -> None:
         if self.reference is None:

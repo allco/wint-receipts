@@ -41,6 +41,8 @@ SVGS = {
               '<path d="M12 20.5v-8M9 15l3-3 3 3" stroke="{accent}"/>',
     # circular arrows
     "reload": '<path d="M19.5 12a7.5 7.5 0 0 1-13 5.1M4.5 12a7.5 7.5 0 0 1 13-5.1"/><path d="M17.5 3.5v3.6h-3.6M6.5 20.5v-3.6h3.6"/>',
+    # a stack of receipts
+    "browse": '<path d="M5 4.5h10v15H5z"/><path d="M15 7.5h4v14H9v-2"/><path d="M8 9h4M8 12h4M8 15h2" stroke="{accent}"/>',
     # sliders
     "settings": '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'
                 '<path d="M4 12h5M13 12h7"/><circle cx="11" cy="12" r="2" stroke="{accent}"/>',
