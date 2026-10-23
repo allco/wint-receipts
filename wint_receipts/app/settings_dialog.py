@@ -1,7 +1,8 @@
 """Settings: Wint credentials (prefilled from WINT_USER / WINT_TOKEN), recognition and upload options."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
@@ -84,6 +85,20 @@ class SettingsDialog(QDialog):
         rf.addRow("Recognition log", self.rec_log_on)
         rf.addRow("", self.rec_log_path)
 
+        self.learn_on = QCheckBox("Learn from my corrections")
+        self.learn_on.setToolTip("When you correct the AI's category or supplier name, remember it for later receipts")
+        self.learn_path = QLineEdit(settings.learnings_file)
+        self.learn_on.toggled.connect(self.learn_path.setEnabled)
+        self.learn_on.setChecked(settings.learnings_enabled)
+        self.learn_path.setEnabled(settings.learnings_enabled)
+        open_learnings = QPushButton("Open file")
+        open_learnings.clicked.connect(self._open_learnings)
+        learn_row = QHBoxLayout()
+        learn_row.addWidget(self.learn_path)
+        learn_row.addWidget(open_learnings)
+        rf.addRow("AI learnings", self.learn_on)
+        rf.addRow("", learn_row)
+
         self.payment = QComboBox()
         self.payment.addItem("(choose per receipt)", None)
         for m in reference.payment_methods if reference else []:
@@ -143,6 +158,17 @@ class SettingsDialog(QDialog):
         apply_font_scale(self._original_scale)  # undo the live preview
         super().reject()
 
+    def _open_learnings(self) -> None:
+        """Open the learnings file in the system's text editor, creating it (with its header) if needed."""
+        from pathlib import Path
+
+        from ..core.learnings import Learnings
+
+        path = Path(self.learn_path.text().strip())
+        if not path.exists():
+            Learnings(path).save()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
     def _fill_from_env(self) -> None:
         env = config.env_credentials()
         if not env.complete:
@@ -181,6 +207,8 @@ class SettingsDialog(QDialog):
             "recognition_log": self.rec_log_path.text().strip(),
             "request_log_enabled": self.log_on.isChecked(),
             "recognition_log_enabled": self.rec_log_on.isChecked(),
+            "learnings_enabled": self.learn_on.isChecked(),
+            "learnings_file": self.learn_path.text().strip(),
             "claude_path": self.claude_path.text().strip() or "claude",
             "claude_model": self.model.currentText().strip() or "sonnet",
             "recognition_dpi": self.dpi.value(),

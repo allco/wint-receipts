@@ -381,3 +381,38 @@ def test_amount_is_bold_also_when_highlighted(window):
     window.page_list.setCurrentRow(0)  # rec_for marks "total" uncertain → amber highlight on amount
     style = window.form.amount.styleSheet()
     assert "font-weight: 700" in style and "background-color" in style
+
+
+def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pdf, tmp_path):
+    """Correct the AI's category once; the next reading of the same supplier gets it right."""
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    prompts = []
+
+    def fake(png, categories, learnings="", **kw):
+        prompts.append(learnings)
+        return recognize.RecognitionResult(Recognition(page_kind=PageKind.RECEIPT, date="2026-10-20", total=99.0,
+                                                       currency="SEK", supplier_name="MR WOK", category_id=7), 0.01)
+
+    monkeypatch.setattr(mw.recognize, "recognize_png", fake)
+    ref = REF.model_copy(update={"categories": [Category(id=7, name="Parkering"), Category(id=8, name="Representation")]})
+    settings = Settings(parallel_recognitions=1, learnings_file=str(tmp_path / "learnings.txt"))
+    w = mw.MainWindow(settings)
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", ref)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    w.page_list.setCurrentRow(0)
+    w.form.category.setCurrentIndex(w.form.category.findData(8))   # the user corrects the category
+    w.form.supplier.setText("Mr Wok AB")                            # ...and the supplier name
+    w.form.supplier.textEdited.emit("Mr Wok AB")
+    w._approve()
+    text = (tmp_path / "learnings.txt").read_text()
+    assert 'supplier: "MR WOK" = "Mr Wok AB"' in text and '= "Representation" [8]' in text
+    w._recognize([1], force=True)  # read another receipt from the same place
+    qtbot.waitUntil(lambda: w.session.pages[1].status is not PageStatus.RECOGNIZING, timeout=10000)
+    d = w.session.pages[1].draft
+    assert d.category_id == 8 and d.supplier_name == "Mr Wok AB"
+    assert "earlier correction" in w.session.pages[1].recognition.notes
+    assert "Representation" in prompts[-1]  # the AI is told as well

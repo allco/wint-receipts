@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import checks, config, pdf, reclog, recognize, upload
+from ..core.learnings import Learnings
 from ..core.config import Settings
 from ..core.models import PageKind, PageState, PageStatus, ReceiptDraft, ReferenceData, Session
 from ..core.session import open_session, save_session
@@ -84,6 +85,7 @@ class MainWindow(QMainWindow):
         self.form.attach_to_previous_requested.connect(self._attach_to_previous)
         self.form.detach_requested.connect(self._detach)
         self._deleted_stack: list[int] = []  # for Ctrl+Z, most recent last
+        self.learnings = self._load_learnings()
 
         self._build_empty_states()
         self.list_stack = self._stack(self.list_empty, self.page_list)
@@ -486,6 +488,7 @@ class MainWindow(QMainWindow):
             indices = [p.index for p in self.session.pages if p.status in (PageStatus.NEW, PageStatus.FAILED)
                        and p.wint_receipt_id is None and not p.deleted]
         categories = list(self.reference.categories) if self.reference else []
+        learnings_text = self.learnings.prompt_section() if self.learnings else ""
         pdf_path = Path(self.session.pdf_path)
         sha = self.session.pdf_sha256
         s = self.settings
@@ -505,7 +508,8 @@ class MainWindow(QMainWindow):
                            "dpi": s.recognition_dpi, "rotation": rotation, "categories": len(categories)}
                 try:
                     png = pdf.render_png(pdf_path, i, s.recognition_dpi, rotation)
-                    res = recognize.recognize_png(png, categories, claude_path=s.claude_path, model=s.claude_model)
+                    res = recognize.recognize_png(png, categories, claude_path=s.claude_path, model=s.claude_model,
+                                                  learnings=learnings_text)
                 except Exception as e:
                     _log_quietly(log, {"event": "failed", **context, "error": str(e) or type(e).__name__})
                     raise
@@ -532,6 +536,12 @@ class MainWindow(QMainWindow):
         p.draft = ReceiptDraft.from_recognition(rec, index, self._default_payment_method())
         if keep_pages:
             p.draft.pages = keep_pages
+        if self.learnings and rec.page_kind is PageKind.RECEIPT:
+            applied = self.learnings.apply(p.draft.supplier_name, rec.supplier_org_number, p.draft.category_id)
+            p.draft.supplier_name = applied.supplier_name or ""
+            p.draft.category_id = applied.category_id
+            if applied.notes:
+                rec.notes = " ".join(([rec.notes] if rec.notes else []) + applied.notes)
         p.status = PageStatus.SKIPPED if rec.page_kind in (PageKind.BLANK, PageKind.BACK_SIDE) else PageStatus.NEEDS_REVIEW
         if rec.page_kind is PageKind.BLANK:
             # Blank pages don't get a row; they can still be brought back with "Restore deleted pages".
@@ -594,11 +604,37 @@ class MainWindow(QMainWindow):
             return
         p.status = PageStatus.APPROVED
         p.error = None
-        self._log_approval(p)
+        learned = self._learn_from(p)
+        self._log_approval(p, learned)
         self._after_page_change(index)
         self._next_needing_review()
 
-    def _log_approval(self, p: PageState) -> None:
+    def _load_learnings(self) -> Learnings | None:
+        path = self.settings.learnings_path()
+        return Learnings(path) if path else None
+
+    def _learn_from(self, p: PageState) -> list[str]:
+        """Remember the user's corrections to the AI's reading, for the next readings."""
+        rec, d = p.recognition, p.draft
+        if not self.learnings or rec is None or d is None or rec.page_kind is not PageKind.RECEIPT:
+            return []
+        learned = []
+        try:
+            if rec.supplier_name and d.supplier_name and rec.supplier_name.strip() != d.supplier_name.strip():
+                learned.append(self.learnings.learn_supplier(rec.supplier_name.strip(), d.supplier_name.strip()))
+            supplier = d.supplier_name or rec.supplier_name
+            if supplier and d.category_id is not None and d.category_id != rec.category_id:
+                name = next((c.name for c in (self.reference.categories if self.reference else [])
+                             if c.id == d.category_id), str(d.category_id))
+                learned.append(self.learnings.learn_category(supplier, rec.supplier_org_number, d.category_id, name))
+        except OSError as e:
+            self.statusBar().showMessage(f"Could not update the AI learnings file: {e}", 8000)
+            return []
+        if learned:
+            self.statusBar().showMessage("Learned for next time: " + "; ".join(l.split("   #")[0] for l in learned), 8000)
+        return learned
+
+    def _log_approval(self, p: PageState, learned: list[str] | None = None) -> None:
         log = self.settings.recognition_log_path()
         try:
             reclog.write(log, {
@@ -607,6 +643,7 @@ class MainWindow(QMainWindow):
                 "changed": reclog.changed_fields(p.recognition, p.draft),
                 "uncertain": p.recognition.uncertain_fields if p.recognition else [],
                 "final": p.draft.model_dump(mode="json", exclude={"pages"}),
+                "learned": [l.split("   #")[0] for l in learned or []],
             })
         except OSError as e:
             self.statusBar().showMessage(f"Could not write recognition log: {e}", 8000)
@@ -877,6 +914,7 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self.settings = dlg.apply()
+        self.learnings = self._load_learnings()
         self.pool.setMaxThreadCount(self.settings.parallel_recognitions)
         self._update_status()
         self._refresh_reference()
