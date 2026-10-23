@@ -287,7 +287,7 @@ class MainWindow(QMainWindow):
         act("Next", lambda: self._step(1), "PgDown")
         tb.addSeparator()
         act("Preview request", self._preview_request, tip="Show the JSON that would be sent to Wint for this page")
-        self.upload_act = act("Upload approved", self._upload_approved)
+        self.upload_act = act("Upload approved", lambda: self._upload_approved())
         tb.addSeparator()
         act("Address book", self._open_address_book, tip="Add, edit or remove the people you pick as participants")
         act("Reload Wint data", self._refresh_reference, tip="Reload categories and payment methods from Wint")

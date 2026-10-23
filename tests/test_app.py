@@ -84,7 +84,7 @@ def test_upload_blocked_when_disabled(window, monkeypatch):
     shown = []
     monkeypatch.setattr(mw.QMessageBox, "information", lambda *a: shown.append(a[2]))
     monkeypatch.setattr(mw.MainWindow, "_client", lambda self, allow_writes=False: pytest.fail("no client"))
-    window._upload_approved()
+    window.upload_act.trigger()  # the toolbar passes `checked`, which must not be taken as `only`
     assert shown and "turned off" in shown[0]
 
 
