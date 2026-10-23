@@ -90,10 +90,7 @@ class MainWindow(QMainWindow):
         self.form.set_reference(self.reference)
         self.form.changed.connect(self._form_changed)
         self.form.approve_requested.connect(self._approve)
-        self.form.skip_requested.connect(self._toggle_skip)
         self.form.rerecognize_requested.connect(lambda: self._recognize([self._current_index()], force=True))
-        self.form.attach_to_previous_requested.connect(self._attach_to_previous)
-        self.form.detach_requested.connect(self._detach)
         self._deleted_stack: list[int] = []  # for Ctrl+Z, most recent last
         self.learnings = self._load_learnings()
 
@@ -184,7 +181,6 @@ class MainWindow(QMainWindow):
         self._waiting_buttons = [
             self.form_waiting.add_button("Read with AI", lambda: self._recognize([self._current_index()], force=True),
                                          primary=True),
-            self.form_waiting.add_button("Skip page", self._toggle_skip),
         ]
         self.form_waiting.finish_buttons()
 
@@ -717,9 +713,6 @@ class MainWindow(QMainWindow):
         if p.draft is None:
             return []
         issues = checks.check(p.draft, self.reference, p.recognition)
-        if p.recognition and p.recognition.page_kind is PageKind.CONTINUATION and self._owner_of(p.index) is None:
-            issues.append(checks.Issue(checks.Level.WARNING, "pages",
-                                       "Looks like a continuation of the previous page — consider “Attach to previous receipt”"))
         return issues
 
     def _run_checks(self) -> None:
@@ -789,61 +782,6 @@ class MainWindow(QMainWindow):
             })
         except OSError as e:
             self.statusBar().showMessage(f"Could not write recognition log: {e}", 8000)
-
-    def _toggle_skip(self) -> None:
-        index = self._current_index()
-        p = self._page(index)
-        if p is None or self._owner_of(index) is not None:
-            return
-        if p.status is PageStatus.SKIPPED:
-            p.status = PageStatus.NEEDS_REVIEW if p.draft else PageStatus.NEW
-        else:
-            p.status = PageStatus.SKIPPED
-        self._after_page_change(index)
-        if p.status is PageStatus.SKIPPED:
-            self._next_needing_review()
-
-    def _attach_to_previous(self) -> None:
-        index = self._current_index()
-        p = self._page(index)
-        if p is None:
-            return
-        prev = next((i for i in range(index - 1, -1, -1) if not self.session.pages[i].deleted), None)
-        if prev is None:
-            return
-        owner_index = self._owner_of(prev)
-        owner = self._page(prev if owner_index is None else owner_index)
-        if owner is None or owner.draft is None:
-            QMessageBox.information(self, "Attach page", "The previous page has no receipt to attach to yet.")
-            return
-        if owner.status in (PageStatus.UPLOADED, PageStatus.UPLOADING):
-            QMessageBox.information(self, "Attach page", "The previous receipt is already uploaded.")
-            return
-        # Pages attached to this one move along with it.
-        moved = p.draft.pages if p.draft else [index]
-        owner.draft.pages = sorted(set(owner.draft.pages) | set(moved) | {index})
-        if p.draft:
-            p.draft.pages = [index]
-        p.status = PageStatus.SKIPPED
-        if owner.status is PageStatus.APPROVED:
-            owner.status = PageStatus.NEEDS_REVIEW
-        self._after_page_change(index)
-        for i in owner.draft.pages:
-            self._refresh_item(i)
-        self._refresh_item(owner.index)
-
-    def _detach(self) -> None:
-        index = self._current_index()
-        owner_index = self._owner_of(index)
-        p, owner = self._page(index), self._page(owner_index if owner_index is not None else -1)
-        if p is None or owner is None or owner.draft is None:
-            return
-        owner.draft.pages = [i for i in owner.draft.pages if i != index]
-        if owner.status is PageStatus.APPROVED:
-            owner.status = PageStatus.NEEDS_REVIEW
-        p.status = PageStatus.NEEDS_REVIEW if p.draft else PageStatus.NEW
-        self._refresh_item(owner.index)
-        self._after_page_change(index)
 
     def _can_delete(self, p: PageState) -> bool:
         return not p.deleted and p.wint_receipt_id is None and p.status not in (PageStatus.UPLOADING, PageStatus.RECOGNIZING)

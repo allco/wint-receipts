@@ -37,10 +37,7 @@ def format_amount(v: float | None) -> str:
 class ReceiptForm(QWidget):
     changed = Signal()  # user edited a field
     approve_requested = Signal()
-    skip_requested = Signal()
     rerecognize_requested = Signal()
-    attach_to_previous_requested = Signal()
-    detach_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,7 +62,6 @@ class ReceiptForm(QWidget):
         self.reason.textEdited.connect(self._edited)
         self.vat = QLabel()
         self.vat.setWordWrap(True)
-        self.pages = QLabel()
         self.notes = QPlainTextEdit()
         self.notes.setReadOnly(True)
         self.notes.setMaximumHeight(120)  # room for the usual 2–3 sentences without scrolling
@@ -88,30 +84,18 @@ class ReceiptForm(QWidget):
         form.addRow("Participants", self.people)
         form.addRow("Reason", self.reason)
         form.addRow("VAT (AI-read)", self.vat)
-        form.addRow("Attached pages", self.pages)
         form.addRow("AI notes", self.notes)
 
         self.approve_btn = QPushButton("Approve  (Ctrl+Enter)")
         self.approve_btn.setObjectName("primary")
         self.approve_btn.clicked.connect(self.approve_requested)
-        self.skip_btn = QPushButton("Skip page")
-        self.skip_btn.clicked.connect(self.skip_requested)
         self.rerec_btn = QPushButton("Read again with AI")
         self.rerec_btn.setIcon(app_icons.icon("recognise"))
         self._update_title_font()
         self.rerec_btn.clicked.connect(self.rerecognize_requested)
-        self.attach_btn = QPushButton("Attach to previous")
-        self.attach_btn.setToolTip("This page continues the receipt on the previous page")
-        self.attach_btn.clicked.connect(self.attach_to_previous_requested)
-        self.detach_btn = QPushButton("Separate receipt")
-        self.detach_btn.clicked.connect(self.detach_requested)
-        # Two columns so the pane stays narrow at large font sizes.
         actions = QGridLayout()
         actions.addWidget(self.approve_btn, 0, 0)
-        actions.addWidget(self.skip_btn, 0, 1)
-        actions.addWidget(self.rerec_btn, 1, 0)
-        actions.addWidget(self.attach_btn, 1, 1)
-        actions.addWidget(self.detach_btn, 2, 1)
+        actions.addWidget(self.rerec_btn, 0, 1)
 
         lay = QVBoxLayout(self)
         lay.addWidget(self.title)
@@ -180,9 +164,7 @@ class ReceiptForm(QWidget):
                 self.title.setText("Open a PDF to start")
                 self._fill(ReceiptDraft())
                 self.notes.setPlainText("")
-                self.pages.setText("")
-                for b in (self.skip_btn, self.rerec_btn, self.attach_btn, self.detach_btn):
-                    b.setEnabled(False)
+                self.rerec_btn.setEnabled(False)
                 return
             status = page.status.value.replace("_", " ")
             extra = f" — Wint receipt {page.wint_receipt_id}" if page.wint_receipt_id else ""
@@ -195,17 +177,8 @@ class ReceiptForm(QWidget):
             if page.error:
                 notes.append(f"Error: {page.error}")
             self.notes.setPlainText("\n".join(notes))
-            if merged_into is not None:
-                self.pages.setText(f"attached to the receipt on page {merged_into + 1}")
-            elif page.draft:
-                self.pages.setText(", ".join(str(i + 1) for i in page.draft.pages))
-            else:
-                self.pages.setText("")
             busy = page.status in (PageStatus.RECOGNIZING, PageStatus.UPLOADING, PageStatus.UPLOADED)
-            self.skip_btn.setEnabled(not busy)
             self.rerec_btn.setEnabled(not busy and merged_into is None)
-            self.attach_btn.setEnabled(not busy and merged_into is None and page.index > 0)
-            self.detach_btn.setEnabled(merged_into is not None and page.status is not PageStatus.UPLOADED)
         finally:
             self._loading = False
 

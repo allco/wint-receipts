@@ -77,16 +77,6 @@ def test_approve_blocked_on_errors(window):
     assert window.session.pages[0].status is PageStatus.NEEDS_REVIEW
 
 
-def test_attach_and_detach(window):
-    window.page_list.setCurrentRow(1)
-    window._attach_to_previous()
-    s = window.session
-    assert s.pages[0].draft.pages == [0, 1] and s.pages[1].status is PageStatus.SKIPPED
-    assert "attached to page 1" in window.page_list.item(1).text()
-    window._detach()
-    assert s.pages[0].draft.pages == [0] and s.pages[1].status is PageStatus.NEEDS_REVIEW
-
-
 def test_upload_blocked_when_disabled(window, monkeypatch):
     window.page_list.setCurrentRow(0)
     window._approve()
@@ -290,8 +280,8 @@ def test_delete_page_hides_it_and_can_be_restored(window, sample_pdf):
 
 def test_delete_releases_attached_pages_and_owner(window):
     s = window.session
-    window.page_list.setCurrentRow(1)
-    window._attach_to_previous()  # page 2 joins the receipt on page 1
+    s.pages[0].draft.pages = [0, 1]  # page 2 joined to page 1 (older sessions can have this)
+    s.pages[1].status = PageStatus.SKIPPED
     assert s.pages[0].draft.pages == [0, 1]
     window.page_list.setCurrentRow(0)
     window._delete_page()  # deleting the owner frees page 2 again
