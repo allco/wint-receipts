@@ -251,6 +251,10 @@ Windows (PowerShell):
 dist\wint-receipts.exe
 ```
 
+To build and install in one go (Linux): `scripts/install.sh` runs the tests, builds, checks the
+binary starts, and installs it as `~/bin/wint-receipts` (`INSTALL_DIR` to change, `SKIP_TESTS=1` to
+skip the tests). It's safe while the app runs; restart it to get the new version.
+
 `python scripts/smoke_test.py <binary>` starts a build headless, without settings or credentials, and
 checks that it doesn't crash.
 
