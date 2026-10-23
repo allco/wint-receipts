@@ -2,8 +2,7 @@
 
 ## AI reads your receipts, you check, Wint books them
 
-**Scan a stack of receipts into one PDF. Claude AI reads each page: date, amount, VAT, supplier and
-category. You check its reading next to the scan and upload the lot to [Wint](https://wint.se).
+**Scan a stack of receipts into one PDF. Claude AI reads each page: date, amount, VAT and category. You check its reading next to the scan and upload the lot to [Wint](https://wint.se).
 No manual typing.**
 
 A desktop app (Python + Qt) built around AI receipt recognition, with a person approving every
@@ -21,9 +20,8 @@ comes back as structured data rather than free text:
 | Purchase date | `2026-10-20`, from formats like *20.10.26* or *2026-10-20* |
 | Amount paid incl. VAT | the real total, not the subtotal, a VAT line or the change given |
 | Currency | `SEK`, `EUR`, … |
-| Supplier and org. number | *Clas Ohlson AB*, `556xxx-xxxx` |
+| Supplier and org. number | used only to match your corrections; not shown on the form or sent to Wint |
 | VAT per rate | 25 % · 12 % · 6 %, with net amounts when printed |
-| What was bought | a short description in the receipt's language |
 | **Category** | picked from *your* Wint company's receipt categories |
 
 What it does beyond reading the text:
@@ -37,7 +35,7 @@ What it does beyond reading the text:
   correct it.
 - **Gets checked by the app.** Net + VAT must add up to the total, VAT rates should be Swedish ones,
   dates can't be in the future or in a locked period. Anything off is flagged before you approve.
-- **Learns from your corrections.** If you change the category or the supplier name the AI read,
+- **Learns from your corrections.** If you change the category the AI suggested,
   the app writes that down in a plain text file, `learnings.txt` (see [AI learnings](#ai-learnings)).
   The next receipt from the same supplier gets your category, and the AI is shown your corrections too.
 - **Shows where it goes wrong.** Every approval can be logged with the fields you corrected, so you
@@ -75,7 +73,8 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      **Rotate left / right** under the image (Ctrl+Shift+R /
      Ctrl+R). The turn is used for the AI reading and for the PDF page sent to Wint. Zoom with − / +,
      1:1 and Fit, or the mouse wheel.
-   - The amount and the supplier are shown in **bold**; they're what to check first.
+   - The form shows only what goes to Wint: date, amount (in **bold**), currency, category and payment
+     method.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
@@ -303,7 +302,8 @@ Receipts from Mr Wok are Representation.
 
 - **`category:` lines** are applied by the app itself after each reading, so they always win. They
   match the supplier by org number, or by name (ignoring case, punctuation and "AB").
-- **`supplier:` lines** correct how the AI writes a supplier's name.
+- **`supplier:` lines** (written by hand) make the app treat two spellings as the same supplier when
+  matching category rules.
 - **Any other line** is passed to the AI as a hint.
 - **`#` lines** are comments.
 - A newer correction for the same supplier replaces the old line.

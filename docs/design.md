@@ -30,7 +30,7 @@ The window has a toolbar, three panes side by side, and a status bar.
 
 | Pane | Default width | Content |
 |---|---|---|
-| Pages | 420 px (min 320) | One row per page: status dot, page number, date · amount · supplier |
+| Pages | 420 px (min 320) | One row per page: status dot, page number, date · amount · category |
 | Page image | flexible | The scan, plus the image bar under it: rotate, zoom, 1:1, Fit |
 | Receipt | 560 px | AI-read fields, AI notes, check results, actions. Scrolls vertically only |
 
@@ -92,8 +92,8 @@ so they stay visible on the blue selected row.
 - **Font:** the system UI font. That's Noto Sans on Fedora, and the design file uses Noto Sans too.
 - **Scale:** the whole UI is multiplied by *Settings → Font size* (0.5×–2.0× in steps of 0.1;
   the default is 1.5×). The change applies immediately.
-- **Hierarchy:** form title is bold at 1.15×. The amount and the supplier are bold: they're what to
-  check first, and they stay bold under the amber/red highlights. Empty-state titles are bold at 1.35×. Secondary text
+- **Hierarchy:** form title is bold at 1.15×. The amount is bold: it's the number to check first,
+  and it stays bold under the amber/red highlights. Empty-state titles are bold at 1.35×. Secondary text
   uses the muted colour at the same size, rather than a smaller one, so it stays readable when scaled.
 
 ## Components
@@ -154,8 +154,10 @@ disabled, they turn the border grey. They grow with the font size.
 - **Uploaded pages** are locked: they can't be edited, merged, rotated or deleted.
 - **Sideways scans are turned automatically.** The AI reports the clockwise turn a page needs; the
   app applies it and says so in the AI notes. The rotate buttons override it.
-- **Corrections teach the AI.** Changing the AI's category or supplier name before approving adds a
-  line to the AI learnings file. The next receipt from that supplier gets the corrected values, and
+- **The form shows only what goes to Wint:** date, amount, currency, category, payment method. The AI
+  also reads the supplier and org number, but only to match learnings; they're neither shown nor sent.
+- **Corrections teach the AI.** Changing the AI's category before approving adds a line to the AI
+  learnings file. The next receipt from that supplier gets the corrected category, and
   the AI notes say so.
 
 ## Not designed yet
