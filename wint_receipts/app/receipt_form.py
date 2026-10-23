@@ -16,7 +16,7 @@ from ..core.models import PageState, PageStatus, ReceiptDraft, ReferenceData
 
 WARN_STYLE = f"background-color: {theme.SURFACE_WARNING};"
 ERROR_STYLE = f"background-color: {theme.SURFACE_ERROR};"
-AMOUNT_STYLE = "font-weight: 700;"  # the recognised total is the number to check first
+BOLD_STYLE = "font-weight: 700;"  # the amount and supplier are what to check first
 
 
 def parse_amount(text: str) -> float | None:
@@ -52,10 +52,11 @@ class ReceiptForm(QWidget):
         self.date.setPlaceholderText("YYYY-MM-DD")
         self.amount = QLineEdit()
         self.amount.setPlaceholderText("total incl. VAT")
-        self.amount.setStyleSheet(AMOUNT_STYLE)
+        self.amount.setStyleSheet(BOLD_STYLE)
         self.currency = QLineEdit()
         self.currency.setMaxLength(3)
         self.supplier = QLineEdit()
+        self.supplier.setStyleSheet(BOLD_STYLE)
         self.comment = QLineEdit()
         self.category = QComboBox()
         self.payment = QComboBox()
@@ -238,8 +239,8 @@ class ReceiptForm(QWidget):
     # ---- issues
 
     def _base_style(self, w) -> str:
-        """Per-field style that the amber/red highlights are added to; the amount is always bold."""
-        return AMOUNT_STYLE if w is self.amount else ""
+        """Per-field style that the amber/red highlights are added to; amount and supplier are bold."""
+        return BOLD_STYLE if w in (self.amount, self.supplier) else ""
 
     def show_issues(self, issues: list[Issue]) -> None:
         widgets = {"date": self.date, "amount": self.amount, "total": self.amount, "currency": self.currency,

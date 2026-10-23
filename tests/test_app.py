@@ -381,6 +381,7 @@ def test_amount_is_bold_also_when_highlighted(window):
     window.page_list.setCurrentRow(0)  # rec_for marks "total" uncertain → amber highlight on amount
     style = window.form.amount.styleSheet()
     assert "font-weight: 700" in style and "background-color" in style
+    assert "font-weight: 700" in window.form.supplier.styleSheet()
 
 
 def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pdf, tmp_path):
