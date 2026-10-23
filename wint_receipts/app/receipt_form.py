@@ -140,13 +140,20 @@ class ReceiptForm(QWidget):
     def set_reference(self, ref: ReferenceData | None) -> None:
         self._loading = True
         try:
-            for combo, items in ((self.category, ref.categories if ref else []),
-                                 (self.payment, ref.payment_methods if ref else [])):
+            for combo, items, top in ((self.category, ref.categories if ref else [], ref.common_category_ids if ref else []),
+                                      (self.payment, ref.payment_methods if ref else [], [])):
                 current = combo.currentData()
                 combo.clear()
                 combo.addItem("— choose —", None)
-                for it in items:
+                by_id = {it.id: it for it in items}
+                first = [by_id[i] for i in top if i in by_id]
+                for it in first:
                     combo.addItem(it.name, it.id)
+                if first:
+                    combo.insertSeparator(combo.count())
+                for it in items:
+                    if it not in first:
+                        combo.addItem(it.name, it.id)
                 if (i := combo.findData(current)) >= 0:
                     combo.setCurrentIndex(i)
             self.people.set_people(ref.persons if ref else [], ref.common_person_ids if ref else [],

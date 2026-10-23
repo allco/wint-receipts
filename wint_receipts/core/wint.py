@@ -18,6 +18,7 @@ import httpx
 from .config import Credentials
 from .models import ME_ID, Category, PaymentMethod, Person, ReceiptDraft, ReferenceData
 
+COMMON_CATEGORIES = 6
 CAPABILITIES = {"X-Wint-Capabilities": "ReceiptPaymentMethodNullability"}
 
 
@@ -125,9 +126,12 @@ class WintClient:
             for m in person_methods or []:
                 if m.get("IsActive", True):
                     methods[m["Id"]] = PaymentMethod(id=m["Id"], name=m.get("Name") or str(m["Id"]), type=_enum_int(m.get("Type")))
-        recent = self.receipts(NumPerPage=100, OrderByProperty="DateTime", OrderByDescending="true")
+        recent = self.receipts(NumPerPage=500, OrderByProperty="DateTime", OrderByDescending="true")
         creators: dict[str, int] = {}
+        category_use: dict[int, int] = {}
         for r in (recent or {}).get("Items") or []:
+            if (cid := r.get("ReceiptCategoryId")) is not None:
+                category_use[cid] = category_use.get(cid, 0) + 1
             if name := (r.get("CreatedByPersonName") or "").strip():
                 creators[name] = creators.get(name, 0) + 1
             mid = r.get("PaymentMethodId")
@@ -149,6 +153,8 @@ class WintClient:
                                                     common_ids.index(p.id) if p.id in common_ids else 0,
                                                     p.name.lower())),
             common_person_ids=common_ids,
+            common_category_ids=[cid for cid, n in sorted(category_use.items(), key=lambda kv: -kv[1])
+                                 if n >= 2 and cid in {c.id for c in categories}][:COMMON_CATEGORIES],
             # Whoever creates the company's receipts most often: the account holder.
             me=Person(id=ME_ID, name=max(creators, key=creators.get), company=c.get("Name") or "") if creators else None,
         )

@@ -148,5 +148,7 @@ class ReferenceData(BaseModel):
     # The receipt address book: the most used people first (Wint's "common" list), then the rest by name.
     persons: list[Person] = Field(default_factory=list)
     common_person_ids: list[int] = Field(default_factory=list)
+    # The categories used most on recent receipts, most used first; the selector lists them on top.
+    common_category_ids: list[int] = Field(default_factory=list)
     # The account holder, added to every representation receipt as a participant.
     me: Person | None = None

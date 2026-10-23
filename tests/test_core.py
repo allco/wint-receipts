@@ -238,9 +238,10 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
             return httpx.Response(200, json=[{"Id": 3, "Name": "Cecilia"}, {"Id": 2, "Name": "Bo"}])
         return httpx.Response(200, json={"Items": [
             {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2,
-             "CreatedByPersonName": "Ada Lovelace"},
+             "CreatedByPersonName": "Ada Lovelace", "ReceiptCategoryId": 7},
             {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2,
-             "CreatedByPersonName": "Ada Lovelace"},
+             "CreatedByPersonName": "Ada Lovelace", "ReceiptCategoryId": 7},
+            {"PaymentMethodId": 16978, "ReceiptCategoryId": 99},
         ]})
 
     client, _ = make_client(handler, tmp_path)
@@ -250,6 +251,7 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
     assert [p.name for p in ref.persons] == ["Cecilia", "Bo", "Anna"]  # most used first, in Wint's order
     assert ref.common_person_ids == [3, 2] and ref.persons[2].company == "A AB"
     assert ref.me.name == "Ada Lovelace" and ref.me.company == "Co" and ref.me.id == 0
+    assert ref.common_category_ids == [7]  # used twice; 99 isn't a receipt category of the company
 
 
 def test_receipt_post_body():

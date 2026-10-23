@@ -664,3 +664,14 @@ def test_participants_suggested_until_confirmed_and_remembered(qtbot, monkeypatc
     w._approve()
     assert p2.status is PageStatus.APPROVED
     assert not p2.draft.participants_suggested and p2.draft.participants_reviewed
+
+
+
+def test_most_used_categories_on_top_with_a_divider(window):
+    ref = REF.model_copy(update={"categories": [Category(id=1, name="Alpha"), Category(id=2, name="Beta"),
+                                                Category(id=3, name="Gamma")], "common_category_ids": [3, 1]})
+    window._reference_loaded("reference", ref)
+    combo = window.form.category
+    items = [combo.itemText(i) for i in range(combo.count())]
+    assert items == ["— choose —", "Gamma", "Alpha", "", "Beta"]  # "" is the divider
+    assert combo.findData(2) == 4
