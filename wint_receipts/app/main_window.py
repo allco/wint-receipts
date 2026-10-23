@@ -513,6 +513,7 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     _log_quietly(log, {"event": "failed", **context, "error": str(e) or type(e).__name__})
                     raise
+                res.rotation_used = rotation
                 _log_quietly(log, {"event": "recognized", **context, "seconds": res.seconds, "cost_usd": res.cost_usd,
                                    "turns": res.num_turns, "usage": res.usage,
                                    "recognition": res.recognition.model_dump(mode="json")})
@@ -542,6 +543,13 @@ class MainWindow(QMainWindow):
             p.draft.category_id = applied.category_id
             if applied.notes:
                 rec.notes = " ".join(([rec.notes] if rec.notes else []) + applied.notes)
+        if rec.rotation_needed % 360 and rec.page_kind is not PageKind.BLANK:
+            # The AI saw the page sideways or upside down: turn it, relative to how it was shown to the AI.
+            p.rotation = (result.rotation_used + rec.rotation_needed) % 360
+            note = f"Page turned {rec.rotation_needed}° automatically so it reads upright."
+            rec.notes = " ".join(x for x in (rec.notes, note) if x)
+            if index == self._current_index():
+                self._show_image(p)
         p.status = PageStatus.SKIPPED if rec.page_kind in (PageKind.BLANK, PageKind.BACK_SIDE) else PageStatus.NEEDS_REVIEW
         if rec.page_kind is PageKind.BLANK:
             # Blank pages don't get a row; they can still be brought back with "Restore deleted pages".

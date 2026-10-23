@@ -38,10 +38,12 @@ RECOGNITION_SCHEMA: dict = {
         "payment_hint": {"type": "string", "enum": ["card", "cash", "swish", "invoice", "unknown"]},
         "uncertain_fields": {"type": "array", "items": {"type": "string"}},
         "notes": {"type": "string"},
+        "rotation_needed": {"type": "integer", "enum": [0, 90, 180, 270],
+                            "description": "Degrees clockwise to turn the image so its text reads upright"},
     },
     "required": [
         "page_kind", "date", "total", "currency", "supplier_name", "supplier_org_number", "vat",
-        "description", "category_id", "payment_hint", "uncertain_fields", "notes",
+        "description", "category_id", "payment_hint", "uncertain_fields", "notes", "rotation_needed",
     ],
     "additionalProperties": False,
 }
@@ -65,6 +67,9 @@ Rules:
 - uncertain_fields: name every field you could not read with confidence (faded print, cut off,
   handwriting, several candidate totals). Do not guess silently; if unreadable, use null and list it.
 - notes: anything a reviewer should know, in one or two sentences. Empty string if nothing.
+- rotation_needed: how many degrees the image must be turned CLOCKWISE so the receipt's text reads
+  normally, left to right: 0 if it already does; 90 if the text runs from bottom to top; 270 if it runs
+  from top to bottom; 180 if it is upside down. Still read all fields, whatever the orientation.
 """
 
 
@@ -79,6 +84,7 @@ class RecognitionResult:
     seconds: float | None = None
     num_turns: int | None = None
     usage: dict = field(default_factory=dict)  # token counts as reported by the CLI
+    rotation_used: int = 0  # how the page image was turned when the AI read it
 
 
 LEARNINGS_SECTION = """

@@ -416,3 +416,28 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
     assert d.category_id == 8 and d.supplier_name == "Mr Wok AB"
     assert "earlier correction" in w.session.pages[1].recognition.notes
     assert "Representation" in prompts[-1]  # the AI is told as well
+
+
+def test_page_turned_automatically_when_ai_sees_it_sideways(qtbot, monkeypatch, sample_pdf):
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    seen_rotations = []
+
+    def render(path, index, dpi=200, rotation=0):
+        seen_rotations.append(rotation)
+        return real_render(path, index, 30, rotation)
+
+    monkeypatch.setattr(mw.pdf, "render_png", render)
+    monkeypatch.setattr(mw.recognize, "recognize_png", lambda png, categories, **kw: recognize.RecognitionResult(
+        Recognition(page_kind=PageKind.RECEIPT, total=10.0, currency="SEK", rotation_needed=90), 0.01))
+    w = mw.MainWindow(Settings(parallel_recognitions=1))
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", REF)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    p = w.session.pages[0]
+    assert p.rotation == 90 and "turned 90°" in p.recognition.notes
+    # Reading again starts from the turned page; another 90 from the AI adds up to 180.
+    w._recognize([0], force=True)
+    qtbot.waitUntil(lambda: w.session.pages[0].status is not PageStatus.RECOGNIZING, timeout=10000)
+    assert 90 in seen_rotations and w.session.pages[0].rotation == 180

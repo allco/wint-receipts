@@ -39,6 +39,7 @@ class Recognition(BaseModel):
     payment_hint: Literal["card", "cash", "swish", "invoice", "unknown"] = "unknown"
     uncertain_fields: list[str] = Field(default_factory=list)
     notes: str = ""
+    rotation_needed: int = 0  # clockwise turn the AI says the image it saw needs to read upright
 
 
 class PageStatus(StrEnum):
