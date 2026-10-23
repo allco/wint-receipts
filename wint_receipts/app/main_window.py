@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import random
 import traceback
 from pathlib import Path
 
@@ -474,8 +475,8 @@ class MainWindow(QMainWindow):
         item.setHidden(p.deleted)
 
     def _suggest_participants(self, p: PageState) -> bool:
-        """Pre-tick likely guests on a representation receipt: the last ones for this supplier, else the
-        most frequent guest. They stay marked as a suggestion until the user confirms them."""
+        """Pre-tick guests on a representation receipt: the last ones for this supplier, else a random
+        person from the address book. They stay marked as a suggestion until the user approves."""
         d, rec, ref = p.draft, p.recognition, self.reference
         if d is None or ref is None or d.participants_reviewed or d.participants_suggested \
                 or not checks.is_representation(self._category_name(d.category_id)) \
@@ -485,8 +486,9 @@ class MainWindow(QMainWindow):
         remembered = self.learnings.participants_for(d.supplier_name, rec.supplier_org_number if rec else None) \
             if self.learnings else []
         guests = [book[pid] for pid, _ in remembered if pid in book]
-        if not guests and ref.common_person_ids and ref.common_person_ids[0] in book:
-            guests = [book[ref.common_person_ids[0]]]
+        if not guests:
+            others = [q for q in ref.persons if q.id != ME_ID]
+            guests = [random.choice(others)] if others else []
         if not guests:
             return False
         d.persons = ([ref.me] if ref.me else []) + guests

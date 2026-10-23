@@ -623,6 +623,8 @@ def test_participants_suggested_until_confirmed_and_remembered(qtbot, monkeypatc
     monkeypatch.setattr(mw.recognize, "recognize_png", lambda png, categories, **kw: recognize.RecognitionResult(
         Recognition(page_kind=PageKind.RECEIPT, date="2026-10-20", total=500.0, currency="SEK",
                     supplier_name="Mr Wok", category_id=8), 0.01))
+    offered = []
+    monkeypatch.setattr(mw.random, "choice", lambda people: offered.append([x.name for x in people]) or people[0])
     me = Person(id=0, name="Ada Lovelace", company="Test AB")
     ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")],
                                  "persons": [Person(id=3, name="Cecilia"), Person(id=1, name="Anna")],
@@ -634,7 +636,8 @@ def test_participants_suggested_until_confirmed_and_remembered(qtbot, monkeypatc
     qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
     w.page_list.setCurrentRow(0)
     p, form = w.session.pages[0], w.form
-    # no history for Mr Wok yet → the most frequent guest is suggested, and approval waits for Confirm
+    # no history for Mr Wok yet → a random person from the address book (here: Cecilia) is suggested
+    assert offered and offered[0] == ["Cecilia", "Anna"]
     assert [x.name for x in p.draft.persons] == ["Ada Lovelace", "Cecilia"] and p.draft.participants_suggested
     assert "check who was there" in form.issues.text() and "Suggested" in form.people.summary.text()
     # the user picks Anna instead (ticking clears the suggestion) and approves → remembered for Mr Wok
