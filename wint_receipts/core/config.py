@@ -43,6 +43,11 @@ def cache_dir() -> Path:
     return Path.home() / ".cache" / APP_DIR
 
 
+def ledger_path() -> Path:
+    """Every upload ever made from this app (see core/ledger.py)."""
+    return config_dir() / "uploads.jsonl"
+
+
 def default_log_dir() -> Path:
     """Where logs go by default: the start folder, except for a packaged app on Windows/macOS,
     which is usually started by double-click with an arbitrary working directory."""
@@ -66,6 +71,7 @@ class Settings(BaseModel):
     default_payment_method_id: int | None = None
     # Creating receipts in Wint is untested: off until the API tests are done.
     uploads_enabled: bool = False
+    attachment_format: str = "jpeg"  # "jpeg" (one image per page) or "pdf" (the scan's page as PDF)
     # Corrections the user made, reused in later AI readings (a plain text file; see core/learnings.py).
     learnings_enabled: bool = True
     learnings_file: str = Field(default_factory=lambda: str(config_dir() / "learnings.txt"))
