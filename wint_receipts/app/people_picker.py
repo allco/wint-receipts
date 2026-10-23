@@ -17,6 +17,7 @@ class PeoplePicker(QWidget):
         self._people: list[Person] = []
         self._common: set[int] = set()
         self._me: Person | None = None
+        self.touched = False  # the user ticked/unticked someone since the page was shown
         self._loading = False
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search participants…")
@@ -44,7 +45,12 @@ class PeoplePicker(QWidget):
         missing = [p for p in people if p.id not in known and p.id != ME_ID]
         if missing:
             self._people = missing + self._people
+        self.touched = False
         self._rebuild({p.id for p in people})
+
+    def set_suggested(self, suggested: bool) -> None:
+        """Show that the ticks are the app's suggestion; approving the receipt accepts them."""
+        self._update_summary(suggested)
 
     def selected(self) -> list[Person]:
         out = []
@@ -102,12 +108,14 @@ class PeoplePicker(QWidget):
 
     def _item_changed(self, _item) -> None:
         if not self._loading:
+            self.touched = True
             self._update_summary()
             self.changed.emit()
 
-    def _update_summary(self) -> None:
+    def _update_summary(self, suggested: bool = False) -> None:
         names = [p.name for p in self.selected()]
-        self.summary.setText(f"{len(names)} selected: " + ", ".join(names) if names else "Nobody selected")
+        text = f"{len(names)} selected: " + ", ".join(names) if names else "Nobody selected"
+        self.summary.setText(f"Suggested — check who was there. {text}" if suggested else text)
 
     def _fit_height(self) -> None:
         self.list.setMinimumHeight(self.fontMetrics().height() * 9)

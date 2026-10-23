@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from ..core import checks, config, pdf, reclog, recognize, upload
 from ..core.learnings import Learnings
 from ..core.config import Settings
-from ..core.models import PageKind, PageState, PageStatus, ReceiptDraft, ReferenceData, Session
+from ..core.models import ME_ID, PageKind, PageState, PageStatus, ReceiptDraft, ReferenceData, Session
 from ..core.session import open_session, save_session
 from ..core.wint import WintClient, receipt_post_body
 from . import empty_states as es
@@ -450,6 +450,26 @@ class MainWindow(QMainWindow):
         item.setToolTip(p.error or STATUS_LABELS[p.status])
         item.setHidden(p.deleted)
 
+    def _suggest_participants(self, p: PageState) -> bool:
+        """Pre-tick likely guests on a representation receipt: the last ones for this supplier, else the
+        most frequent guest. They stay marked as a suggestion until the user confirms them."""
+        d, rec, ref = p.draft, p.recognition, self.reference
+        if d is None or ref is None or d.participants_reviewed or d.participants_suggested \
+                or not checks.is_representation(self._category_name(d.category_id)) \
+                or any(q.id != ME_ID for q in d.persons) or p.status not in (PageStatus.NEEDS_REVIEW, PageStatus.FAILED):
+            return False
+        book = {q.id: q for q in ref.persons}
+        remembered = self.learnings.participants_for(d.supplier_name, rec.supplier_org_number if rec else None) \
+            if self.learnings else []
+        guests = [book[pid] for pid, _ in remembered if pid in book]
+        if not guests and ref.common_person_ids and ref.common_person_ids[0] in book:
+            guests = [book[ref.common_person_ids[0]]]
+        if not guests:
+            return False
+        d.persons = ([ref.me] if ref.me else []) + guests
+        d.participants_suggested = True
+        return True
+
     def _category_name(self, category_id: int | None) -> str:
         cats = self.reference.categories if self.reference else []
         return next((c.name for c in cats if c.id == category_id), "")
@@ -461,6 +481,8 @@ class MainWindow(QMainWindow):
             self.form.set_page(None, None)
             self._sync_panes()
             return
+        if self._suggest_participants(p):
+            self._schedule_save()
         self._show_image(p)
         self.image_pane.set_rotation_enabled(p.wint_receipt_id is None and p.status is not PageStatus.UPLOADING)
         if p.draft and p.draft.payment_method_id is None and p.status is not PageStatus.UPLOADED:
@@ -664,6 +686,7 @@ class MainWindow(QMainWindow):
             if index == self._current_index():
                 self._step_away_from(index)
             self.statusBar().showMessage(f"Page {index + 1} is blank and was left out of the list", 6000)
+        self._suggest_participants(p)
         self._after_page_change(index)
 
     def _recognition_failed(self, index: int, msg: str) -> None:
@@ -683,6 +706,8 @@ class MainWindow(QMainWindow):
         p.draft = self.form.read_draft(p.draft)
         if p.status is PageStatus.APPROVED:
             p.status = PageStatus.NEEDS_REVIEW  # edits after approval need another look
+        if self._suggest_participants(p):  # e.g. the category was just changed to Representation
+            self.form.set_page(p, self._owner_of(p.index))
         self._refresh_item(p.index)
         self._run_checks()
         self._schedule_save()
@@ -719,6 +744,8 @@ class MainWindow(QMainWindow):
             return
         p.status = PageStatus.APPROVED
         p.error = None
+        if p.draft.participants_suggested:  # approving is the user's confirmation
+            p.draft.participants_suggested, p.draft.participants_reviewed = False, True
         learned = self._learn_from(p)
         self._log_approval(p, learned)
         self._after_page_change(index)
@@ -736,6 +763,9 @@ class MainWindow(QMainWindow):
         learned = []
         try:
             supplier = d.supplier_name or rec.supplier_name
+            guests = [(q.id, q.name) for q in d.persons if q.id != ME_ID]
+            if supplier and guests and checks.is_representation(self._category_name(d.category_id)):
+                learned.append(self.learnings.learn_participants(supplier, rec.supplier_org_number, guests))
             if supplier and d.category_id is not None and d.category_id != rec.category_id:
                 name = self._category_name(d.category_id) or str(d.category_id)
                 learned.append(self.learnings.learn_category(supplier, rec.supplier_org_number, d.category_id, name))

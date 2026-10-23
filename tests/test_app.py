@@ -473,6 +473,7 @@ def test_people_row_only_for_representation_and_saved(window):
         "persons": [Person(id=3, name="Cecilia"), Person(id=1, name="Anna", company="A AB")],
         "common_person_ids": [3]})
     window._reference_loaded("reference", ref)
+    window.session.pages[0].draft.participants_reviewed = True  # this test picks people by hand
     window.page_list.setCurrentRow(0)
     form = window.form
     assert not form.people_row_visible()
@@ -504,6 +505,7 @@ def test_account_holder_is_added_automatically(window):
     ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")],
                                  "persons": [Person(id=3, name="Cecilia")], "common_person_ids": [3], "me": me})
     window._reference_loaded("reference", ref)
+    window.session.pages[0].draft.participants_reviewed = True  # this test picks people by hand
     window.page_list.setCurrentRow(0)
     form = window.form
     form.category.setCurrentIndex(form.category.findData(8))
@@ -619,3 +621,46 @@ def test_read_with_ai_asks_before_reading_again(window, monkeypatch, qtbot):
         else:
             assert queued.pop() == (expected, True)
     assert asked[-1] == (2, 3)  # 2 not approved, 3 in total
+
+
+
+def test_participants_suggested_until_confirmed_and_remembered(qtbot, monkeypatch, sample_pdf, tmp_path):
+    from wint_receipts.core.models import Person
+    monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
+    real_render = mw.pdf.render_png
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30))
+    monkeypatch.setattr(mw.recognize, "recognize_png", lambda png, categories, **kw: recognize.RecognitionResult(
+        Recognition(page_kind=PageKind.RECEIPT, date="2026-10-20", total=500.0, currency="SEK",
+                    supplier_name="Mr Wok", category_id=8), 0.01))
+    me = Person(id=0, name="Ada Lovelace", company="Test AB")
+    ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")],
+                                 "persons": [Person(id=3, name="Cecilia"), Person(id=1, name="Anna")],
+                                 "common_person_ids": [3], "me": me})
+    w = mw.MainWindow(Settings(parallel_recognitions=1, learnings_file=str(tmp_path / "learnings.txt")))
+    qtbot.addWidget(w)
+    w._reference_loaded("reference", ref)
+    w.open_pdf(sample_pdf)
+    qtbot.waitUntil(lambda: all(p.status is not PageStatus.RECOGNIZING for p in w.session.pages), timeout=10000)
+    w.page_list.setCurrentRow(0)
+    p, form = w.session.pages[0], w.form
+    # no history for Mr Wok yet → the most frequent guest is suggested, and approval waits for Confirm
+    assert [x.name for x in p.draft.persons] == ["Ada Lovelace", "Cecilia"] and p.draft.participants_suggested
+    assert "check who was there" in form.issues.text() and "Suggested" in form.people.summary.text()
+    # the user picks Anna instead (ticking clears the suggestion) and approves → remembered for Mr Wok
+    from PySide6.QtCore import Qt
+    rows = {form.people.list.item(i).text(): form.people.list.item(i) for i in range(form.people.list.count())}
+    rows["Cecilia"].setCheckState(Qt.CheckState.Unchecked)
+    rows["Anna"].setCheckState(Qt.CheckState.Checked)
+    assert not p.draft.participants_suggested and [x.name for x in p.draft.persons] == ["Ada Lovelace", "Anna"]
+    w._approve()
+    assert p.status is PageStatus.APPROVED
+    assert 'participants: "Mr Wok" = "Anna" [1]' in (tmp_path / "learnings.txt").read_text()
+    # the next Mr Wok receipt suggests Anna; approving accepts it as is
+    p2 = w.session.pages[1]
+    p2.draft.persons, p2.draft.participants_suggested, p2.draft.participants_reviewed = [], False, False
+    w.page_list.setCurrentRow(0)
+    w.page_list.setCurrentRow(1)
+    assert [x.name for x in p2.draft.persons] == ["Ada Lovelace", "Anna"] and p2.draft.participants_suggested
+    w._approve()
+    assert p2.status is PageStatus.APPROVED
+    assert not p2.draft.participants_suggested and p2.draft.participants_reviewed

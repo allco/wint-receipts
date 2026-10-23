@@ -78,8 +78,10 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - **Representation** receipts get a **Participants** field: tick who took part, from the people
      you've registered in Wint (Wint's receipt address book, most used first, with search). You are
      added automatically, so one guest is enough for the required **2 participants**. They're sent to
-     Wint in the receipt's `Persons` field. A **Reason** field, prefilled with "collaboration
-     discussion", is sent as `Intent`.
+     Wint in the receipt's `Persons` field. The guest is suggested: the guests from your last approved
+     receipt with the same supplier (remembered in the AI learnings file as a `participants:` line), or
+     else your most frequent guest. A suggestion is marked amber "check who was there" until you
+     approve. A **Reason** field, prefilled with "collaboration discussion", is sent as `Intent`.
    - **Address book** (toolbar): add, edit or remove the people you can pick, straight in Wint
      (`AddReceiptPerson` / `RemoveReceiptPerson`). Wint has no edit, so editing adds the corrected
      person and then removes the old entry. Not yet tried against the live API.

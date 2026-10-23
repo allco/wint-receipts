@@ -209,6 +209,7 @@ class ReceiptForm(QWidget):
         self.category.setCurrentIndex(max(self.category.findData(d.category_id), 0))
         self.payment.setCurrentIndex(max(self.payment.findData(d.payment_method_id), 0))
         self.people.set_selected(d.persons)
+        self.people.set_suggested(d.participants_suggested)
         self.reason.setText(d.intent)
         self._update_people_row()
         self.vat.setText("; ".join(
@@ -232,6 +233,8 @@ class ReceiptForm(QWidget):
             "payment_method_id": self.payment.currentData(),
             "persons": self.people.selected() if self.people_row_visible() else [],
             "intent": self.reason.text().strip() if self.people_row_visible() else "",
+            "participants_suggested": base.participants_suggested and not self.people.touched,
+            "participants_reviewed": base.participants_reviewed or self.people.touched,
         })
 
     def people_row_visible(self) -> bool:
