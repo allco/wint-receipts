@@ -34,6 +34,9 @@ What it does beyond reading the text:
   (skipped), and pages that continue the receipt before them (the app suggests merging).
 - **Gets checked by the app.** Net + VAT must add up to the total, VAT rates should be Swedish ones,
   dates can't be in the future or in a locked period. Anything off is flagged before you approve.
+- **Learns from your corrections.** If you change the category or the supplier name the AI read,
+  the app writes that down in a plain text file, `learnings.txt` (see [AI learnings](#ai-learnings)).
+  The next receipt from the same supplier gets your category, and the AI is shown your corrections too.
 - **Shows where it goes wrong.** Every approval can be logged with the fields you corrected, so you
   can see which fields the AI gets wrong most often (see *Recognition log* under Settings).
 - **Is fast and cheap.** About 3–7 s and $0.03 per page with Claude Sonnet. Several pages are read
@@ -65,6 +68,10 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
    - A receipt that runs over two pages can be merged with **Attach to previous**.
    - Blank pages are left out of the list (*Restore deleted pages* brings them back if Claude was
      wrong). Receipt backs are shown but skipped.
+   - Rotated scans: turn the page with **Rotate left / right** under the image (Ctrl+Shift+R /
+     Ctrl+R). The turn is used for the AI reading and for the PDF page sent to Wint. Zoom with − / +,
+     1:1 and Fit, or the mouse wheel.
+   - The amount is shown in **bold**; it's the number to check first.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
@@ -259,6 +266,8 @@ Platform notes:
 
   Example: which fields get corrected most?
   `jq -s 'map(select(.event=="approved")) | map(.changed[]) | group_by(.) | map({field: .[0], n: length})' recognition.log`
+- **AI learnings** (on by default): the learnings file's path, and an *Open file* button that opens
+  it in your text editor.
 - **Recognition:** the claude command and model (`sonnet` by default), the render DPI, and how many
   pages to read in parallel.
 - **Upload:** the default payment method (otherwise the first one), and the **Enable uploads** switch.
@@ -275,6 +284,28 @@ Where the app keeps its files (`XDG_CONFIG_HOME` / `XDG_CACHE_HOME` override thi
 By default, both logs are written to the folder the app is started from. The exception is the
 packaged app on Windows and macOS, which is usually started by double-clicking: it writes them to a
 `logs` folder inside its settings folder. You can change both paths in Settings.
+
+## AI learnings
+
+`learnings.txt` lives in the settings folder (e.g. `~/.config/wint-receipts/learnings.txt`). The app
+adds a line when you correct the AI before approving a receipt, and reads the file before each AI
+reading. It's a plain text file: edit, add or delete lines freely.
+
+```
+category: "EasyPark AB" (org 556xxx-xxxx) = "Parkering" [86914]   # learned 2026-10-23
+supplier: "EASYPARK" = "EasyPark AB"   # learned 2026-10-23
+Receipts from Mr Wok are Representation.
+```
+
+- **`category:` lines** are applied by the app itself after each reading, so they always win. They
+  match the supplier by org number, or by name (ignoring case, punctuation and "AB").
+- **`supplier:` lines** correct how the AI writes a supplier's name.
+- **Any other line** is passed to the AI as a hint.
+- **`#` lines** are comments.
+- A newer correction for the same supplier replaces the old line.
+
+When a learned rule changes a reading, the receipt's *AI notes* say so, e.g. "Category set to
+"Parkering" from your earlier correction for EasyPark AB."
 
 ## Wint API
 
@@ -312,6 +343,7 @@ wint_receipts/core/    UI-free logic
   upload.py            create one receipt per approved page, idempotent by ClientId
   session.py           per-PDF state next to the PDF
   reclog.py            recognition log
+  learnings.py         AI learnings file: parse, apply, learn
   config.py            settings + credentials (env → keyring)
 wint_receipts/app/     PySide6 UI
   main_window.py       page list | page image | receipt form
@@ -319,9 +351,11 @@ wint_receipts/app/     PySide6 UI
   empty_states.py      illustrated placeholders
   theme.py, icons.py   design colours and the app's own icons
   fonts.py             live font scaling
-  settings_dialog.py, image_view.py, workers.py
+  image_view.py        zoomable page view + rotate/zoom bar
+  settings_dialog.py, workers.py
 tests/                 pytest + pytest-qt
-scripts/build-binary.sh
+scripts/build.py, build-binary.sh, smoke_test.py
+.github/workflows/     release builds on semver tags
 bin/wint               logged curl wrapper
 docs/wintapi.md        Wint API reference
 docs/design.md         design notes; docs/design/*.png are screens (Git LFS)
