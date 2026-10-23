@@ -176,7 +176,7 @@ def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str
         "ReceiptCategoryId": draft.category_id,
         "PaymentMethodId": draft.payment_method_id,
         "Dimensions": [],
-        # People who took part (representation). Wint's ReceiptPerson shape; untested on create.
+        # Participants (representation): ReceiptPost.Persons, "People the receipt concerns"; untested on create.
         "Persons": [{"Id": p.id, "Name": p.name, "Company": p.company} for p in draft.persons],
         "Attachments": [{
             "FileName": file_name,

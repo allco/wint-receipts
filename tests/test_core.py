@@ -402,9 +402,11 @@ def test_render_max_side_caps_long_edge(sample_pdf):
 def test_representation_needs_people_and_sends_them():
     from wint_receipts.core.models import Person
     ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")]})
-    issues = checks.check(good_draft(category_id=8), ref, today=date(2026, 10, 21))
-    assert any(i.field == "persons" for i in issues) and not checks.blocking(issues)
-    with_people = good_draft(category_id=8, persons=[Person(id=3, name="Cecilia", company="C AB")])
-    assert not any(i.field == "persons" for i in checks.check(with_people, ref, today=date(2026, 10, 21)))
-    body = receipt_post_body(with_people, b"%PDF", "cid", "a.pdf")
-    assert body["Persons"] == [{"Id": 3, "Name": "Cecilia", "Company": "C AB"}]
+    cecilia, bo = Person(id=3, name="Cecilia", company="C AB"), Person(id=2, name="Bo")
+    for people in ([], [cecilia]):  # fewer than 2 participants blocks approval
+        issues = checks.check(good_draft(category_id=8, persons=people), ref, today=date(2026, 10, 21))
+        assert checks.blocking(issues) and any(i.field == "persons" and "at least 2" in i.message for i in issues)
+    two = good_draft(category_id=8, persons=[cecilia, bo])
+    assert not any(i.field == "persons" for i in checks.check(two, ref, today=date(2026, 10, 21)))
+    body = receipt_post_body(two, b"%PDF", "cid", "a.pdf")
+    assert body["Persons"] == [{"Id": 3, "Name": "Cecilia", "Company": "C AB"}, {"Id": 2, "Name": "Bo", "Company": ""}]

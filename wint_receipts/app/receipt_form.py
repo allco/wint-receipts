@@ -82,7 +82,7 @@ class ReceiptForm(QWidget):
         form.addRow("Currency", self.currency)
         form.addRow("Category", self.category)
         form.addRow("Payment method", self.payment)
-        form.addRow("People", self.people)
+        form.addRow("Participants", self.people)
         form.addRow("VAT (AI-read)", self.vat)
         form.addRow("Attached pages", self.pages)
         form.addRow("AI notes", self.notes)
@@ -231,7 +231,7 @@ class ReceiptForm(QWidget):
         return is_representation(self.category.currentText())
 
     def _update_people_row(self, *_):
-        """The People field is only for representation receipts."""
+        """The Participants field is only for representation receipts."""
         self._form.setRowVisible(self.people, self.people_row_visible())
 
     def date_text_invalid(self) -> bool:

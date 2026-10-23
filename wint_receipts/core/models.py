@@ -71,7 +71,7 @@ class ReceiptDraft(BaseModel):
     category_id: int | None = None
     payment_method_id: int | None = None
     vat: list[VatLine] = Field(default_factory=list)
-    persons: list[Person] = Field(default_factory=list)  # who took part, for representation receipts
+    persons: list[Person] = Field(default_factory=list)  # participants of a representation receipt
     # Pages of the source PDF attached to this receipt (0-based). Normally just the page itself;
     # continuation pages get merged into the receipt before them.
     pages: list[int] = Field(default_factory=list)

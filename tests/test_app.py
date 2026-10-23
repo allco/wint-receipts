@@ -397,7 +397,7 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
                                                        currency="SEK", supplier_name="MR WOK", category_id=7), 0.01)
 
     monkeypatch.setattr(mw.recognize, "recognize_png", fake)
-    ref = REF.model_copy(update={"categories": [Category(id=7, name="Parkering"), Category(id=8, name="Representation")]})
+    ref = REF.model_copy(update={"categories": [Category(id=7, name="Parkering"), Category(id=8, name="Förbrukning")]})
     settings = Settings(parallel_recognitions=1, learnings_file=str(tmp_path / "learnings.txt"))
     w = mw.MainWindow(settings)
     qtbot.addWidget(w)
@@ -408,13 +408,13 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
     w.form.category.setCurrentIndex(w.form.category.findData(8))   # the user corrects the category
     w._approve()
     text = (tmp_path / "learnings.txt").read_text()
-    assert 'category: "MR WOK" = "Representation" [8]' in text
+    assert 'category: "MR WOK" = "Förbrukning" [8]' in text
     w._recognize([1], force=True)  # read another receipt from the same place
     qtbot.waitUntil(lambda: w.session.pages[1].status is not PageStatus.RECOGNIZING, timeout=10000)
     d = w.session.pages[1].draft
     assert d.category_id == 8
     assert "earlier correction" in w.session.pages[1].recognition.notes
-    assert "Representation" in prompts[-1]  # the AI is told as well
+    assert "Förbrukning" in prompts[-1]  # the AI is told as well
 
 
 def test_page_turned_automatically_when_ai_sees_it_sideways(qtbot, monkeypatch, sample_pdf):
@@ -472,7 +472,7 @@ def test_people_row_only_for_representation_and_saved(window):
     assert not form.people_row_visible()
     form.category.setCurrentIndex(form.category.findData(8))
     assert form.people_row_visible()
-    assert "Representation: add the people" in form.issues.text()
+    assert "at least 2 participants" in form.issues.text()
     texts = [form.people.list.item(i).text() for i in range(form.people.list.count())]
     assert texts == ["Most used", "Cecilia", "Everyone else", "Anna — A AB"]
     form.people.search.setText("anna")
@@ -480,7 +480,11 @@ def test_people_row_only_for_representation_and_saved(window):
     form.people.list.item(3).setCheckState(Qt.CheckState.Checked)
     p = window.session.pages[0]
     assert [x.name for x in p.draft.persons] == ["Anna"]
-    assert "add the people" not in form.issues.text()
+    window._approve()
+    assert p.status is not PageStatus.APPROVED  # one participant isn't enough
+    form.people.search.setText("")
+    form.people.list.item(1).setCheckState(Qt.CheckState.Checked)
+    assert "participants" not in form.issues.text()
     window.page_list.setCurrentRow(1)
     window.page_list.setCurrentRow(0)  # coming back shows the saved selection
-    assert [x.name for x in form.people.selected()] == ["Anna"]
+    assert sorted(x.name for x in form.people.selected()) == ["Anna", "Cecilia"]

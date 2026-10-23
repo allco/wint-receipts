@@ -12,6 +12,9 @@ TOLERANCE = 0.02
 REVIEWED_FIELDS = {"date", "total", "currency", "category_id", "vat"}  # AI fields shown on the form
 
 
+MIN_PARTICIPANTS = 2
+
+
 def is_representation(category_name: str | None) -> bool:
     """Representation and Personalrepresentation receipts list the people who took part."""
     return "representation" in (category_name or "").lower()  # öre rounding
@@ -64,8 +67,9 @@ def check(
         err("category", "Category is not one of the company's receipt categories")
 
     category = next((c for c in (reference.categories if reference else []) if c.id == draft.category_id), None)
-    if category and is_representation(category.name) and not draft.persons:
-        warn("persons", "Representation: add the people who took part")
+    if category and is_representation(category.name) and len(draft.persons) < MIN_PARTICIPANTS:
+        err("persons", f"Representation needs at least {MIN_PARTICIPANTS} participants "
+                       f"({len(draft.persons)} selected)")
 
     if draft.payment_method_id is None:
         err("payment_method", "Payment method is not chosen")

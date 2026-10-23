@@ -1,4 +1,4 @@
-"""Pick people from the Wint receipt address book: search, tick, most used first."""
+"""Pick participants from the Wint receipt address book: search, tick, most used first."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -18,7 +18,7 @@ class PeoplePicker(QWidget):
         self._common: set[int] = set()
         self._loading = False
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search people…")
+        self.search.setPlaceholderText("Search participants…")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._filter)
         self.list = QListWidget()
