@@ -28,6 +28,8 @@ SVGS = {
     # magnifier with plus / minus
     "zoom-in": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5"/><path d="M10.5 7.5v6M7.5 10.5h6" stroke="{accent}"/>',
     "zoom-out": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5"/><path d="M7.5 10.5h6" stroke="{accent}"/>',
+    "people": '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>'
+              '<circle cx="17" cy="9" r="2.5" stroke="{accent}"/><path d="M16 14.2a5 5 0 0 1 6 4.8" stroke="{accent}"/>',
     "previous": '<path d="M14.5 6l-6 6 6 6"/>',
     "next": '<path d="M9.5 6l6 6-6 6"/>',
     # corners pointing outward around a page

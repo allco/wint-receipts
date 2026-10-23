@@ -2,6 +2,9 @@
 import json
 
 import pytest
+from PySide6.QtWidgets import QDialog
+
+QDialogAccepted = QDialog.DialogCode.Accepted
 
 from wint_receipts.app import main_window as mw
 from wint_receipts.core import recognize
@@ -514,3 +517,45 @@ def test_account_holder_is_added_automatically(window):
     assert form.reason.text() == "collaboration discussion" and p.draft.intent == "collaboration discussion"
     window._approve()
     assert p.status is PageStatus.APPROVED
+
+
+def test_address_book_add_edit_remove(qtbot, monkeypatch):
+    from wint_receipts.app import address_book as ab
+    from wint_receipts.core.models import Person
+
+    class FakeClient:
+        calls = []
+
+        def add_person(self, name, company):
+            self.calls.append(("add", name, company)); return 500 + len(self.calls)
+
+        def replace_person(self, pid, name, company):
+            self.calls.append(("replace", pid, name, company)); return 700
+
+        def remove_person(self, pid, name=""):
+            self.calls.append(("remove", pid))
+
+        def close(self):
+            pass
+
+    answers = iter([("Ada", "Analytical AB"), ("Ada Lovelace", "Analytical AB")])
+    monkeypatch.setattr(ab.PersonDialog, "exec", lambda self: QDialogAccepted)
+    monkeypatch.setattr(ab.PersonDialog, "values", lambda self: next(answers))
+    monkeypatch.setattr(ab.QMessageBox, "question", lambda *a: ab.QMessageBox.StandardButton.Yes)
+    dlg = ab.AddressBookDialog([Person(id=1, name="Bo")], [1], lambda: FakeClient())
+    qtbot.addWidget(dlg)
+    dlg._add()
+    qtbot.waitUntil(lambda: any(p.name == "Ada" for p in dlg._people), timeout=5000)
+    ada_row = next(i for i in range(dlg.list.count()) if dlg.list.item(i).text().startswith("Ada"))
+    dlg.list.setCurrentRow(ada_row)
+    dlg._edit()
+    qtbot.waitUntil(lambda: any(p.name == "Ada Lovelace" for p in dlg._people), timeout=5000)
+    assert [p.name for p in dlg._people] == ["Bo", "Ada Lovelace"]
+    bo_row = next(i for i in range(dlg.list.count()) if dlg.list.item(i).text().startswith("Bo"))
+    dlg.list.setCurrentRow(bo_row)
+    assert "most used" in dlg.list.item(bo_row).text()
+    dlg._remove()
+    qtbot.waitUntil(lambda: [p.name for p in dlg._people] == ["Ada Lovelace"], timeout=5000)
+    assert FakeClient.calls == [("add", "Ada", "Analytical AB"), ("replace", 501, "Ada Lovelace", "Analytical AB"),
+                                ("remove", 1)]
+    assert dlg.changed

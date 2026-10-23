@@ -22,6 +22,7 @@ from ..core.wint import WintClient, receipt_post_body
 from . import empty_states as es
 from . import icons as app_icons
 from . import theme
+from .address_book import AddressBookDialog
 from .image_view import ImagePane
 from .receipt_form import ReceiptForm, format_amount
 from .settings_dialog import SettingsDialog
@@ -228,7 +229,7 @@ class MainWindow(QMainWindow):
         icons = {
             "Open PDF…": "open", "Read with AI": "recognise", "Previous": "previous", "Next": "next",
             "Preview request": "preview", "Upload approved": "upload",
-            "Reload Wint data": "reload", "Settings…": "settings",
+            "Address book": "people", "Reload Wint data": "reload", "Settings…": "settings",
         }
 
         def act(text, slot, shortcut=None, tip=None):
@@ -251,6 +252,7 @@ class MainWindow(QMainWindow):
         act("Preview request", self._preview_request, tip="Show the JSON that would be sent to Wint for this page")
         self.upload_act = act("Upload approved", self._upload_approved)
         tb.addSeparator()
+        act("Address book", self._open_address_book, tip="Add, edit or remove the people you pick as participants")
         act("Reload Wint data", self._refresh_reference, tip="Reload categories and payment methods from Wint")
         act("Settings…", self._open_settings, "Ctrl+,")
         undo = QAction(self)
@@ -957,6 +959,16 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Upload", f"Page {index + 1} failed to upload; remaining uploads stopped.\n\n{msg}")
 
     # ---- settings
+
+    def _open_address_book(self) -> None:
+        if self.reference is None:
+            QMessageBox.information(self, "Address book", "Wint data isn't loaded yet; check Settings → Wint API.")
+            return
+        dlg = AddressBookDialog(self.reference.persons, self.reference.common_person_ids,
+                                lambda: self._client(allow_writes=True), self)
+        dlg.exec()
+        if dlg.changed:
+            self._refresh_reference()
 
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self.settings, self.reference, self)

@@ -80,6 +80,9 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      added automatically, so one guest is enough for the required **2 participants**. They're sent to
      Wint in the receipt's `Persons` field. A **Reason** field, prefilled with "collaboration
      discussion", is sent as `Intent`.
+   - **Address book** (toolbar): add, edit or remove the people you can pick, straight in Wint
+     (`AddReceiptPerson` / `RemoveReceiptPerson`). Wint has no edit, so editing adds the corrected
+     person and then removes the old entry. Not yet tried against the live API.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF
