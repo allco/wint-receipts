@@ -6,6 +6,7 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, QThreadPool, QTimer, Qt
+from shiboken6 import isValid
 from PySide6.QtGui import QAction, QBrush, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QDialogButtonBox, QFileDialog, QFrame, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
@@ -34,6 +35,8 @@ STATUS_LABELS = {
 }
 REFERENCE_CACHE = "reference.json"
 DISPLAY_DPI = 150
+DISPLAY_MAX_SIDE = 2400  # px; big scans would otherwise take seconds to render
+RECOGNITION_MAX_SIDE = 2000  # px; Claude scales larger images down anyway
 
 
 def _log_quietly(path: Path | None, entry: dict) -> None:
@@ -57,6 +60,10 @@ class MainWindow(QMainWindow):
         self._recognize_after_reference = False  # a PDF was opened before the categories arrived
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(settings.parallel_recognitions)
+        # Page images for the screen render on their own thread, so they never queue behind AI jobs.
+        self.render_pool = QThreadPool(self)
+        self.render_pool.setMaxThreadCount(1)
+        self._rendering: set[tuple[int, int]] = set()
         self._save_timer = QTimer(self, singleShot=True, interval=400, timeout=self._save_now)
 
         self.setWindowTitle("Wint receipts")
@@ -331,11 +338,17 @@ class MainWindow(QMainWindow):
 
     # ---- jobs
 
-    def _run(self, job: Job, on_done, on_failed) -> None:
+    def _run(self, job: Job, on_done, on_failed, pool: QThreadPool | None = None) -> None:
         self._jobs.add(job)
-        job.signals.done.connect(lambda tag, res: (self._jobs.discard(job), on_done(tag, res)))
-        job.signals.failed.connect(lambda tag, msg: (self._jobs.discard(job), on_failed(tag, msg)))
-        self.pool.start(job)
+
+        def deliver(handler, tag, value):
+            self._jobs.discard(job)
+            if isValid(self):  # the window may be gone by the time a background job finishes
+                handler(tag, value)
+
+        job.signals.done.connect(lambda tag, res: deliver(on_done, tag, res))
+        job.signals.failed.connect(lambda tag, msg: deliver(on_failed, tag, msg))
+        (pool or self.pool).start(job)
 
     # ---- opening
 
@@ -352,6 +365,7 @@ class MainWindow(QMainWindow):
             return
         self.session = session
         self._display_cache.clear()
+        self._rendering.clear()
         self.setWindowTitle(f"Wint receipts — {path.name}")
         self.page_list.clear()
         self._deleted_stack = []
@@ -434,13 +448,39 @@ class MainWindow(QMainWindow):
         self._sync_panes()
 
     def _show_image(self, p: PageState, keep_view: bool = False) -> None:
+        """Show the page image; renders it in the background if it isn't cached yet."""
         key = (p.index, p.rotation)
-        if key not in self._display_cache:
-            try:
-                self._display_cache[key] = pdf.render_png(Path(self.session.pdf_path), p.index, DISPLAY_DPI, p.rotation)
-            except Exception as e:  # noqa: BLE001
-                self.statusBar().showMessage(f"Could not render page {p.index + 1}: {e}", 8000)
-        self.image.set_png(self._display_cache.get(key), keep_view=keep_view)
+        if key in self._display_cache:
+            self.image.set_png(self._display_cache[key], keep_view=keep_view)
+            self._prefetch(p.index + 1)
+            return
+        self.image.set_png(None)  # don't keep showing the previous page while this one renders
+        self._render_async(key)
+
+    def _render_async(self, key: tuple[int, int]) -> None:
+        if key in self._rendering or key in self._display_cache or not self.session:
+            return
+        self._rendering.add(key)
+        path, (index, rotation) = Path(self.session.pdf_path), key
+        job = Job(key, lambda: pdf.render_png(path, index, DISPLAY_DPI, rotation, DISPLAY_MAX_SIDE))
+        self._run(job, self._rendered, self._render_failed, pool=self.render_pool)
+
+    def _prefetch(self, index: int) -> None:
+        p = self._page(index)
+        if p is not None and not p.deleted:
+            self._render_async((p.index, p.rotation))
+
+    def _rendered(self, key: tuple[int, int], png: bytes) -> None:
+        self._rendering.discard(key)
+        self._display_cache[key] = png
+        p = self._page(self._current_index())
+        if p is not None and (p.index, p.rotation) == key:
+            self.image.set_png(png)
+            self._prefetch(p.index + 1)
+
+    def _render_failed(self, key: tuple[int, int], msg: str) -> None:
+        self._rendering.discard(key)
+        self.statusBar().showMessage(f"Could not render page {key[0] + 1}: {msg}", 8000)
 
     def _rotate(self, delta: int) -> None:
         """Turn the current page; applies to the view, the next AI reading, and the uploaded PDF page."""
@@ -507,7 +547,7 @@ class MainWindow(QMainWindow):
                 context = {"pdf": str(pdf_path), "pdf_sha256": sha, "page": i + 1, "model": s.claude_model,
                            "dpi": s.recognition_dpi, "rotation": rotation, "categories": len(categories)}
                 try:
-                    png = pdf.render_png(pdf_path, i, s.recognition_dpi, rotation)
+                    png = pdf.render_png(pdf_path, i, s.recognition_dpi, rotation, RECOGNITION_MAX_SIDE)
                     res = recognize.recognize_png(png, categories, claude_path=s.claude_path, model=s.claude_model,
                                                   learnings=learnings_text)
                 except Exception as e:
@@ -966,4 +1006,6 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.pool.clear()
+        self.render_pool.clear()
+        self.render_pool.waitForDone(2000)  # a page render takes well under a second
         event.accept()

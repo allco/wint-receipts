@@ -30,20 +30,27 @@ def page_count(path: Path) -> int:
             pdf.close()
 
 
-def render_png(path: Path, index: int, dpi: int = 200, rotation: int = 0) -> bytes:
-    """Render one page (0-based) to PNG bytes, turned clockwise by `rotation` degrees (0/90/180/270)."""
+def render_png(path: Path, index: int, dpi: int = 200, rotation: int = 0, max_side: int | None = None) -> bytes:
+    """Render one page (0-based) to PNG bytes, turned clockwise by `rotation` degrees (0/90/180/270).
+
+    `max_side` caps the longer edge in pixels: scans are often far larger than anyone needs, and
+    rendering them at full DPI is slow.
+    """
     with _lock:
         pdf = pdfium.PdfDocument(path)
         try:
             page = pdf[index]
             try:
-                image = page.render(scale=dpi / 72, rotation=rotation % 360).to_pil()
+                scale = dpi / 72
+                if max_side:
+                    scale = min(scale, max_side / max(page.get_width(), page.get_height()))
+                image = page.render(scale=scale, rotation=rotation % 360).to_pil()
             finally:
                 page.close()
         finally:
             pdf.close()
     buf = io.BytesIO()
-    image.save(buf, format="PNG")
+    image.save(buf, format="PNG", compress_level=1)  # speed over size; it's only kept in memory
     return buf.getvalue()
 
 

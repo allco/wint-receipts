@@ -381,3 +381,9 @@ def test_upload_attaches_rotated_page(tmp_path, sample_pdf):
     doc = pdfium.PdfDocument(io.BytesIO(base64.b64decode(sent["body"]["Attachments"][0]["Data"])))
     assert doc[0].get_rotation() == 270
     doc.close()
+
+
+def test_render_max_side_caps_long_edge(sample_pdf):
+    from PIL import Image
+    im = Image.open(io.BytesIO(pdf.render_png(sample_pdf, 2, dpi=300, max_side=100)))  # page 3 is 400×500 pt
+    assert max(im.size) == 100

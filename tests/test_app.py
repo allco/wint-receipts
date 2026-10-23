@@ -27,7 +27,7 @@ def window(qtbot, monkeypatch, sample_pdf):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     calls = []
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
 
     def fake_recognize(png, categories, **kw):
         calls.append(1)
@@ -99,7 +99,7 @@ def test_sole_payment_method_used_and_recognition_waits_for_reference(qtbot, mon
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: setattr(self, "_reference_loading", True))
     monkeypatch.setattr(mw.MainWindow, "_load_cached_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
 
     def fake_recognize(png, categories, **kw):
         seen_categories.append(len(categories))
@@ -144,7 +144,7 @@ def test_recognition_log(window, tmp_path):
 def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
 
     def boom(png, categories, **kw):
         raise recognize.RecognitionError("claude timed out after 300s")
@@ -161,7 +161,7 @@ def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
 def test_recognition_log_off(qtbot, monkeypatch, sample_pdf, tmp_path):
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
     monkeypatch.setattr(mw.recognize, "recognize_png",
                         lambda png, categories, **kw: recognize.RecognitionResult(rec_for(0), 0.01))
     w = mw.MainWindow(Settings(parallel_recognitions=1, recognition_log_enabled=False))
@@ -211,7 +211,7 @@ def test_empty_states_and_pane_switching(qtbot, monkeypatch, sample_pdf):
     import threading
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
     gate = threading.Event()
 
     def slow(png, categories, **kw):
@@ -387,7 +387,7 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
     """Correct the AI's category once; the next reading of the same supplier gets it right."""
     monkeypatch.setattr(mw.MainWindow, "_refresh_reference", lambda self: None)
     real_render = mw.pdf.render_png
-    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0: real_render(path, index, 30, rotation))
+    monkeypatch.setattr(mw.pdf, "render_png", lambda path, index, dpi=200, rotation=0, max_side=None: real_render(path, index, 30, rotation))
     prompts = []
 
     def fake(png, categories, learnings="", **kw):
@@ -423,7 +423,7 @@ def test_page_turned_automatically_when_ai_sees_it_sideways(qtbot, monkeypatch, 
     real_render = mw.pdf.render_png
     seen_rotations = []
 
-    def render(path, index, dpi=200, rotation=0):
+    def render(path, index, dpi=200, rotation=0, max_side=None):
         seen_rotations.append(rotation)
         return real_render(path, index, 30, rotation)
 
@@ -441,3 +441,19 @@ def test_page_turned_automatically_when_ai_sees_it_sideways(qtbot, monkeypatch, 
     w._recognize([0], force=True)
     qtbot.waitUntil(lambda: w.session.pages[0].status is not PageStatus.RECOGNIZING, timeout=10000)
     assert 90 in seen_rotations and w.session.pages[0].rotation == 180
+
+
+def test_page_image_renders_off_the_ui_thread(window, qtbot):
+    import threading
+    ui = threading.get_ident()
+    threads = []
+    real = mw.pdf.render_png
+    mw.pdf.render_png = lambda *a, **kw: (threads.append(threading.get_ident()), real(a[0], a[1], 30))[1]
+    try:
+        window._display_cache.clear()
+        window.page_list.setCurrentRow(1)
+        qtbot.waitUntil(lambda: (1, 0) in window._display_cache, timeout=5000)
+    finally:
+        mw.pdf.render_png = real
+    assert threads and ui not in threads
+    assert not window.image._item.pixmap().isNull()
