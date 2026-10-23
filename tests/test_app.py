@@ -681,3 +681,18 @@ def test_uploaded_pages_restored_from_ledger(qtbot, monkeypatch, sample_pdf):
     p = w.session.pages[1]
     assert p.status is PageStatus.UPLOADED and p.wint_receipt_id == 3026953 and p.client_id == "cid-x"
     assert w.session.pages[0].status is PageStatus.NEW
+
+
+def test_upload_skips_pages_already_in_the_ledger(window, monkeypatch):
+    from wint_receipts.core import config
+    from wint_receipts.core.ledger import Ledger
+    s = window.session
+    s.pages[0].status = PageStatus.APPROVED
+    Ledger(config.ledger_path()).add(pdf_sha256=s.pdf_sha256, pdf=s.pdf_path, page=0, client_id="other-window",
+                                     wint_receipt_id=3027387, date="2026-10-13", amount=146.55, currency="SEK")
+    shown = []
+    monkeypatch.setattr(mw.QMessageBox, "information", lambda *a: shown.append(a[2]))
+    window._upload_approved()
+    assert s.pages[0].status is PageStatus.UPLOADED and s.pages[0].wint_receipt_id == 3027387
+    assert "☁ Wint #3027387" in window.page_list.item(0).text()
+    assert shown and "No approved receipts" in shown[0]  # nothing left to upload

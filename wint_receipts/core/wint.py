@@ -120,7 +120,7 @@ class WintClient:
 
     def find_similar(self, day: date, amount: float) -> list[dict]:
         start = datetime.combine(day, datetime.min.time())
-        data = self.receipts(AmountFrom=amount - 0.01, AmountTo=amount + 0.01, NumPerPage=50)
+        data = self.receipts(AmountFrom=f"{amount - 0.01:.2f}", AmountTo=f"{amount + 0.01:.2f}", NumPerPage=50)
         return [r for r in (data or {}).get("Items") or [] if str(r.get("DateTime", "")).startswith(start.date().isoformat())]
 
     def reference_data(self) -> ReferenceData:

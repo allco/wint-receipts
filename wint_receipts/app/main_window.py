@@ -441,6 +441,8 @@ class MainWindow(QMainWindow):
             detail = "failed"
         else:
             detail = STATUS_LABELS[p.status]
+        if p.wint_receipt_id is not None:
+            detail += f"  ·  ☁ Wint #{p.wint_receipt_id}"
         item.setText(f"{index + 1}.  {detail}")
         item.setIcon(es.status_dot(STATUS_COLORS[p.status]))
         dim = p.status is PageStatus.SKIPPED or owner is not None
@@ -927,6 +929,11 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _upload_approved(self) -> None:
+        # Pages uploaded meanwhile (e.g. from another window) are in the ledger: mark them before choosing.
+        self._restore_uploads(self.session)
+        for q in self.session.pages:
+            self._refresh_item(q.index)
+        self._update_status()
         pages = self._approved()
         if not pages:
             QMessageBox.information(self, "Upload", "No approved receipts to upload.")
