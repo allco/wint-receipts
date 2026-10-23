@@ -75,7 +75,7 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      **Rotate left / right** under the image (Ctrl+Shift+R /
      Ctrl+R). The turn is used for the AI reading and for the PDF page sent to Wint. Zoom with − / +,
      1:1 and Fit, or the mouse wheel.
-   - The amount is shown in **bold**; it's the number to check first.
+   - The amount and the supplier are shown in **bold**; they're what to check first.
    - Right-click a page in the list → **Delete page** (or press `Del`) to remove it from the review.
      The PDF file isn't changed. Ctrl+Z, or *Restore deleted pages*, brings it back.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) as the PDF

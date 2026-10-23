@@ -92,8 +92,8 @@ so they stay visible on the blue selected row.
 - **Font:** the system UI font. That's Noto Sans on Fedora, and the design file uses Noto Sans too.
 - **Scale:** the whole UI is multiplied by *Settings → Font size* (0.5×–2.0× in steps of 0.1;
   the default is 1.5×). The change applies immediately.
-- **Hierarchy:** form title is bold at 1.15×. The amount is bold: it's the number to check first,
-  and it stays bold under the amber/red highlights. Empty-state titles are bold at 1.35×. Secondary text
+- **Hierarchy:** form title is bold at 1.15×. The amount and the supplier are bold: they're what to
+  check first, and they stay bold under the amber/red highlights. Empty-state titles are bold at 1.35×. Secondary text
   uses the muted colour at the same size, rather than a smaller one, so it stays readable when scaled.
 
 ## Components
