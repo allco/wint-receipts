@@ -13,6 +13,7 @@ REVIEWED_FIELDS = {"date", "total", "currency", "category_id", "vat"}  # AI fiel
 
 
 MIN_PARTICIPANTS = 2
+DEFAULT_REASON = "collaboration discussion"
 
 
 def is_representation(category_name: str | None) -> bool:
@@ -69,7 +70,9 @@ def check(
     category = next((c for c in (reference.categories if reference else []) if c.id == draft.category_id), None)
     if category and is_representation(category.name) and len(draft.persons) < MIN_PARTICIPANTS:
         err("persons", f"Representation needs at least {MIN_PARTICIPANTS} participants "
-                       f"({len(draft.persons)} selected)")
+                       f"({len(draft.persons)} so far)")
+    if category and is_representation(category.name) and not draft.intent.strip():
+        err("intent", "Representation needs a reason")
 
     if draft.payment_method_id is None:
         err("payment_method", "Payment method is not chosen")

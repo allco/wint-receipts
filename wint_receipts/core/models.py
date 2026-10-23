@@ -18,10 +18,13 @@ class PageKind(StrEnum):
     NOT_A_RECEIPT = "not_a_receipt"
 
 
+ME_ID = 0
+
+
 class Person(BaseModel):
     """Someone from the Wint receipt address book, e.g. a guest on a representation receipt."""
 
-    id: int
+    id: int  # address-book id; ME_ID for the account holder, who isn't in the address book
     name: str
     company: str = ""
 
@@ -72,6 +75,7 @@ class ReceiptDraft(BaseModel):
     payment_method_id: int | None = None
     vat: list[VatLine] = Field(default_factory=list)
     persons: list[Person] = Field(default_factory=list)  # participants of a representation receipt
+    intent: str = ""  # the reason for a representation receipt (Wint's ReceiptPost.Intent)
     # Pages of the source PDF attached to this receipt (0-based). Normally just the page itself;
     # continuation pages get merged into the receipt before them.
     pages: list[int] = Field(default_factory=list)
@@ -142,3 +146,5 @@ class ReferenceData(BaseModel):
     # The receipt address book: the most used people first (Wint's "common" list), then the rest by name.
     persons: list[Person] = Field(default_factory=list)
     common_person_ids: list[int] = Field(default_factory=list)
+    # The account holder, added to every representation receipt as a participant.
+    me: Person | None = None

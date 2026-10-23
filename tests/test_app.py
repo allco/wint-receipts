@@ -488,3 +488,29 @@ def test_people_row_only_for_representation_and_saved(window):
     window.page_list.setCurrentRow(1)
     window.page_list.setCurrentRow(0)  # coming back shows the saved selection
     assert sorted(x.name for x in form.people.selected()) == ["Anna", "Cecilia"]
+
+
+
+def test_account_holder_is_added_automatically(window):
+    from wint_receipts.core.models import Person
+    from PySide6.QtCore import Qt
+    me = Person(id=0, name="Ada Lovelace", company="Test AB")
+    ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")],
+                                 "persons": [Person(id=3, name="Cecilia")], "common_person_ids": [3], "me": me})
+    window._reference_loaded("reference", ref)
+    window.page_list.setCurrentRow(0)
+    form = window.form
+    form.category.setCurrentIndex(form.category.findData(8))
+    first = form.people.list.item(0)
+    assert "you, added automatically" in first.text() and first.checkState() is Qt.CheckState.Checked
+    assert not first.flags() & Qt.ItemFlag.ItemIsUserCheckable  # can't be unticked
+    assert "1 so far" in form.issues.text()
+    form.people.search.setText("zzz")
+    assert not first.isHidden()  # stays visible while searching
+    form.people.search.setText("")
+    form.people.list.item(2).setCheckState(Qt.CheckState.Checked)  # one guest is enough now
+    p = window.session.pages[0]
+    assert [x.name for x in p.draft.persons] == ["Ada Lovelace", "Cecilia"]
+    assert form.reason.text() == "collaboration discussion" and p.draft.intent == "collaboration discussion"
+    window._approve()
+    assert p.status is PageStatus.APPROVED

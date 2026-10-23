@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 
 from .config import Credentials
-from .models import Category, PaymentMethod, Person, ReceiptDraft, ReferenceData
+from .models import ME_ID, Category, PaymentMethod, Person, ReceiptDraft, ReferenceData
 
 CAPABILITIES = {"X-Wint-Capabilities": "ReceiptPaymentMethodNullability"}
 
@@ -126,7 +126,10 @@ class WintClient:
                 if m.get("IsActive", True):
                     methods[m["Id"]] = PaymentMethod(id=m["Id"], name=m.get("Name") or str(m["Id"]), type=_enum_int(m.get("Type")))
         recent = self.receipts(NumPerPage=100, OrderByProperty="DateTime", OrderByDescending="true")
+        creators: dict[str, int] = {}
         for r in (recent or {}).get("Items") or []:
+            if name := (r.get("CreatedByPersonName") or "").strip():
+                creators[name] = creators.get(name, 0) + 1
             mid = r.get("PaymentMethodId")
             if mid and mid not in methods:
                 methods[mid] = PaymentMethod(id=mid, name=r.get("PaymentMethodName") or str(mid), type=_enum_int(r.get("PaymentMethodType")))
@@ -146,6 +149,8 @@ class WintClient:
                                                     common_ids.index(p.id) if p.id in common_ids else 0,
                                                     p.name.lower())),
             common_person_ids=common_ids,
+            # Whoever creates the company's receipts most often: the account holder.
+            me=Person(id=ME_ID, name=max(creators, key=creators.get), company=c.get("Name") or "") if creators else None,
         )
 
     # ---- writes (UNTESTED against the live API — see docs/wintapi.md)
@@ -178,6 +183,7 @@ def receipt_post_body(draft: ReceiptDraft, attachment_pdf: bytes, client_id: str
         "Dimensions": [],
         # Participants (representation): ReceiptPost.Persons, "People the receipt concerns"; untested on create.
         "Persons": [{"Id": p.id, "Name": p.name, "Company": p.company} for p in draft.persons],
+        "Intent": draft.intent or None,
         "Attachments": [{
             "FileName": file_name,
             "ContentType": "application/pdf",

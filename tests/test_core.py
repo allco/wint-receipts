@@ -204,8 +204,10 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
         if req.url.path == "/api/Receipt/CommonReceiptPersons":
             return httpx.Response(200, json=[{"Id": 3, "Name": "Cecilia"}, {"Id": 2, "Name": "Bo"}])
         return httpx.Response(200, json={"Items": [
-            {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2},
-            {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2},
+            {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2,
+             "CreatedByPersonName": "Ada Lovelace"},
+            {"PaymentMethodId": 16978, "PaymentMethodName": "Eget utlägg", "PaymentMethodType": 2,
+             "CreatedByPersonName": "Ada Lovelace"},
         ]})
 
     client, _ = make_client(handler, tmp_path)
@@ -214,6 +216,7 @@ def test_reference_data_collects_payment_methods_from_receipts(tmp_path):
     assert ref.lock_date == date(2026, 6, 30) and ref.categories[0].name == "Parkering"
     assert [p.name for p in ref.persons] == ["Cecilia", "Bo", "Anna"]  # most used first, in Wint's order
     assert ref.common_person_ids == [3, 2] and ref.persons[2].company == "A AB"
+    assert ref.me.name == "Ada Lovelace" and ref.me.company == "Co" and ref.me.id == 0
 
 
 def test_receipt_post_body():
@@ -410,3 +413,16 @@ def test_representation_needs_people_and_sends_them():
     assert not any(i.field == "persons" for i in checks.check(two, ref, today=date(2026, 10, 21)))
     body = receipt_post_body(two, b"%PDF", "cid", "a.pdf")
     assert body["Persons"] == [{"Id": 3, "Name": "Cecilia", "Company": "C AB"}, {"Id": 2, "Name": "Bo", "Company": ""}]
+
+
+
+def test_representation_needs_reason_sent_as_intent():
+    from wint_receipts.core.models import Person
+    ref = REF.model_copy(update={"categories": [Category(id=8, name="Representation")]})
+    people = [Person(id=0, name="Me"), Person(id=3, name="Cecilia")]
+    no_reason = good_draft(category_id=8, persons=people)
+    assert any(i.field == "intent" for i in checks.check(no_reason, ref, today=date(2026, 10, 21)))
+    ok = good_draft(category_id=8, persons=people, intent="collaboration discussion")
+    assert not checks.blocking(checks.check(ok, ref, today=date(2026, 10, 21)))
+    assert receipt_post_body(ok, b"%PDF", "cid", "a.pdf")["Intent"] == "collaboration discussion"
+    assert receipt_post_body(good_draft(), b"%PDF", "cid", "a.pdf")["Intent"] is None

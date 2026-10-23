@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QGridLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
-from ..core.checks import Issue, Level, is_representation
+from ..core.checks import DEFAULT_REASON, Issue, Level, is_representation
 from . import icons as app_icons
 from . import theme
 from .people_picker import PeoplePicker
@@ -60,6 +60,9 @@ class ReceiptForm(QWidget):
         self.payment = QComboBox()
         self.people = PeoplePicker()
         self.people.changed.connect(self._edited)
+        self.reason = QLineEdit()
+        self.reason.setPlaceholderText(DEFAULT_REASON)
+        self.reason.textEdited.connect(self._edited)
         self.vat = QLabel()
         self.vat.setWordWrap(True)
         self.pages = QLabel()
@@ -83,6 +86,7 @@ class ReceiptForm(QWidget):
         form.addRow("Category", self.category)
         form.addRow("Payment method", self.payment)
         form.addRow("Participants", self.people)
+        form.addRow("Reason", self.reason)
         form.addRow("VAT (AI-read)", self.vat)
         form.addRow("Attached pages", self.pages)
         form.addRow("AI notes", self.notes)
@@ -145,7 +149,8 @@ class ReceiptForm(QWidget):
                     combo.addItem(it.name, it.id)
                 if (i := combo.findData(current)) >= 0:
                     combo.setCurrentIndex(i)
-            self.people.set_people(ref.persons if ref else [], ref.common_person_ids if ref else [])
+            self.people.set_people(ref.persons if ref else [], ref.common_person_ids if ref else [],
+                                   ref.me if ref else None)
         finally:
             self._loading = False
         if self._page:
@@ -162,7 +167,7 @@ class ReceiptForm(QWidget):
             enabled = page is not None and page.draft is not None and merged_into is None \
                 and page.status not in (PageStatus.UPLOADED, PageStatus.UPLOADING)
             for w in (self.date, self.amount, self.currency, self.category,
-                      self.payment, self.people, self.approve_btn):
+                      self.payment, self.people, self.reason, self.approve_btn):
                 w.setEnabled(enabled)
             if page is None:
                 self.title.setText("Open a PDF to start")
@@ -204,6 +209,7 @@ class ReceiptForm(QWidget):
         self.category.setCurrentIndex(max(self.category.findData(d.category_id), 0))
         self.payment.setCurrentIndex(max(self.payment.findData(d.payment_method_id), 0))
         self.people.set_selected(d.persons)
+        self.reason.setText(d.intent)
         self._update_people_row()
         self.vat.setText("; ".join(
             f"{v.rate:g} %: {format_amount(v.amount)}" + (f" on {format_amount(v.net)}" if v.net is not None else "")
@@ -225,14 +231,19 @@ class ReceiptForm(QWidget):
             "category_id": self.category.currentData(),
             "payment_method_id": self.payment.currentData(),
             "persons": self.people.selected() if self.people_row_visible() else [],
+            "intent": self.reason.text().strip() if self.people_row_visible() else "",
         })
 
     def people_row_visible(self) -> bool:
         return is_representation(self.category.currentText())
 
     def _update_people_row(self, *_):
-        """The Participants field is only for representation receipts."""
-        self._form.setRowVisible(self.people, self.people_row_visible())
+        """Participants and Reason are only for representation receipts; the reason starts as the usual one."""
+        visible = self.people_row_visible()
+        self._form.setRowVisible(self.people, visible)
+        self._form.setRowVisible(self.reason, visible)
+        if visible and not self.reason.text().strip():
+            self.reason.setText(DEFAULT_REASON)
 
     def date_text_invalid(self) -> bool:
         t = self.date.text().strip()
@@ -253,7 +264,7 @@ class ReceiptForm(QWidget):
     def show_issues(self, issues: list[Issue]) -> None:
         widgets = {"date": self.date, "amount": self.amount, "total": self.amount, "currency": self.currency,
                    "category": self.category, "category_id": self.category,
-                   "payment_method": self.payment, "persons": self.people.list}
+                   "payment_method": self.payment, "persons": self.people.list, "intent": self.reason}
         for w in set(widgets.values()):
             w.setStyleSheet(self._base_style(w))
         for i in sorted(issues, key=lambda i: i.level is Level.ERROR):  # errors win
