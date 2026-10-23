@@ -8,7 +8,10 @@ No manual typing.**
 A desktop app (Python + Qt) built around AI receipt recognition, with a person approving every
 receipt before it reaches the bookkeeping.
 
-![Review screen: the scan on the left, the AI-read fields on the right](docs/design/03-review.png)
+<p>
+  <img src="docs/design/03-review.png" width="49%" alt="Review screen: the scan on the left, the AI-read fields on the right">
+  <img src="docs/design/05-browser.png" width="49%" alt="Receipts in Wint: a filterable table and a preview of the selected receipt">
+</p>
 
 ## What the AI does
 
@@ -104,8 +107,6 @@ anything, so a retried upload doesn't create duplicates.
 ### Browse what's already in Wint
 
 **Wint receipts** (toolbar, Ctrl+B) opens a window with every receipt in your Wint company.
-
-![Receipts in Wint: a filterable table and a preview of the selected receipt](docs/design/05-browser.png)
 
 - **Filters** run in Wint: date range, state, category, paid or unpaid, and amount from/to.
   **Search** looks through the receipts already loaded (number, amount, category, people, comment).
