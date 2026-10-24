@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import traceback
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -51,6 +52,16 @@ def main() -> int:
     settings = Settings.load()
     apply_font_scale(settings.font_scale)
     window = MainWindow(settings)
+    window.log_event("app_started", version=_version(), platform=sys.platform,
+                     pdf=str(args.pdf) if args.pdf else None)
+    default_hook = sys.excepthook
+
+    def crash(kind, value, tb):
+        window.log_event("crash", error=f"{kind.__name__}: {value}",
+                         traceback="".join(traceback.format_exception(kind, value, tb)))
+        default_hook(kind, value, tb)
+
+    sys.excepthook = crash
     window.show()
     if args.pdf:
         window.open_pdf(args.pdf)

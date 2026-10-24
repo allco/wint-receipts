@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
         wf.addRow("", self.log_path)
 
         self.rec_log_path = QLineEdit(settings.recognition_log)
-        self.rec_log_on = QCheckBox("Log every recognition and approval")
+        self.rec_log_on = QCheckBox("Log app events: readings, approvals, uploads and errors")
         self.rec_log_on.toggled.connect(self.rec_log_path.setEnabled)
         self.rec_log_on.setChecked(settings.recognition_log_enabled)
         self.rec_log_path.setEnabled(settings.recognition_log_enabled)
@@ -82,7 +82,7 @@ class SettingsDialog(QDialog):
         rf.addRow("Model", self.model)
         rf.addRow("Render DPI", self.dpi)
         rf.addRow("Pages in parallel", self.parallel)
-        rf.addRow("Recognition log", self.rec_log_on)
+        rf.addRow("Event log", self.rec_log_on)
         rf.addRow("", self.rec_log_path)
 
         self.learn_on = QCheckBox("Learn from my corrections")

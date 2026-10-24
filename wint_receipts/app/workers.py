@@ -8,6 +8,8 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
+on_error: Callable[[Any, str, str], None] | None = None  # (tag, message, traceback), called from the worker thread
+
 
 class JobSignals(QObject):
     done = Signal(object, object)  # (tag, result)
@@ -29,6 +31,11 @@ class Job(QRunnable):
         except Exception as e:  # noqa: BLE001 - reported to the UI
             msg = str(e) or type(e).__name__
             traceback.print_exc()
+            if on_error is not None:
+                try:
+                    on_error(self.tag, msg, traceback.format_exc())
+                except Exception:  # noqa: BLE001 - logging must never break the job
+                    pass
             self._emit(self.signals.failed, msg)
         else:
             self._emit(self.signals.done, result)

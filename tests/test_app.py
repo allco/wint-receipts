@@ -124,7 +124,9 @@ def test_first_payment_method_preselected_when_several(qtbot, monkeypatch):
 
 def test_recognition_log(window, tmp_path):
     lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
-    assert [e["event"] for e in lines] == ["recognized"] * 3
+    assert [e["event"] for e in lines] == ["wint_data_loaded", "pdf_opened"] + ["recognized"] * 3
+    assert lines[1]["pages"] == 3 and lines[0]["company"] == "Test AB"
+    lines = lines[2:]
     assert lines[0]["page"] == 1 and lines[0]["cost_usd"] == 0.01 and lines[0]["recognition"]["total"] == 44.85
     window.page_list.setCurrentRow(0)
     window.form.currency.setText("EUR")
@@ -149,7 +151,9 @@ def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
     w.open_pdf(sample_pdf)
     qtbot.waitUntil(lambda: all(p.status is PageStatus.FAILED for p in w.session.pages), timeout=10000)
     lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
-    assert {e["event"] for e in lines} == {"failed"} and "timed out" in lines[0]["error"]
+    failed = [e for e in lines if e["event"] == "failed"]
+    assert {e["event"] for e in lines} <= {"pdf_opened", "failed", "error"} and len(failed) == 3
+    assert "timed out" in failed[0]["error"]
 
 
 def test_recognition_log_off(qtbot, monkeypatch, sample_pdf, tmp_path):
@@ -796,3 +800,37 @@ def test_upload_progress_and_cancel(window, monkeypatch):
     assert [p.status for p in s.pages] == [PageStatus.UPLOADED, PageStatus.UPLOADED, PageStatus.APPROVED]
     assert "1 not sent" in window.statusBar().currentMessage()
     assert window.upload_act.isEnabled()
+
+
+def test_event_log_records_uploads_and_background_errors(window, monkeypatch, tmp_path):
+    log = tmp_path / "cache" / "wint-receipts" / "recognition.log"
+    s = window.session
+    for p in s.pages[:2]:
+        p.status = PageStatus.APPROVED
+    window.settings.uploads_enabled = True
+    started = []
+
+    class Client:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(mw.checks, "blocking", lambda issues: [])
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a: mw.QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(mw.QMessageBox, "warning", lambda *a: None)
+    monkeypatch.setattr(window, "_client", lambda allow_writes=False: Client())
+    monkeypatch.setattr(window, "_run", lambda job, ok, fail: started.append((job.tag, ok, fail)))
+    window._upload_approved()
+    tag, ok, fail = started[-1]
+    ok(tag, 5001)
+    tag, ok, fail = started[-1]
+    fail(tag, "HTTP 500")
+    events = [json.loads(x) for x in log.read_text().splitlines()]
+    names = [e["event"] for e in events]
+    assert names[-3:] == ["upload_started", "uploaded", "upload_failed"]
+    assert events[-2]["wint_receipt_id"] == 5001 and events[-1]["error"] == "HTTP 500"
+
+    from wint_receipts.app import workers
+    job = workers.Job("probe", lambda: 1 / 0)
+    job.run()
+    last = json.loads(log.read_text().splitlines()[-1])
+    assert last["event"] == "error" and last["job"] == "probe" and "ZeroDivisionError" in last["traceback"]

@@ -42,7 +42,7 @@ What it does beyond reading the text:
   the app writes that down in a plain text file, `learnings.txt` (see [AI learnings](#ai-learnings)).
   The next receipt from the same supplier gets your category, and the AI is shown your corrections too.
 - **Shows where it goes wrong.** Every approval can be logged with the fields you corrected, so you
-  can see which fields the AI gets wrong most often (see *Recognition log* under Settings).
+  can see which fields the AI gets wrong most often (see *Event log* under Settings).
 - **Is fast and cheap.** About 3–7 s and $0.03 per page with Claude Sonnet. Several pages are read
   in parallel while you review the first ones.
 
@@ -313,10 +313,17 @@ Platform notes:
 - **Logs** live in the cache folder by default: `~/.cache/wint-receipts` on Linux,
   `~/Library/Caches/wint-receipts` on macOS, `%LOCALAPPDATA%\wint-receipts\cache` on Windows.
 - **Request log** (on by default): every Wint request is appended as a JSON line to `wint-requests.log`.
-- **Recognition log** (on by default): `recognition.log`, one JSON event per line:
+- **Event log** (on by default): `recognition.log`, one JSON event per line, good news and errors alike:
+  - `app_started` / `app_closed`, `pdf_opened` / `open_failed`, `wint_data_loaded` / `wint_data_failed`.
   - `recognized`: page, model, DPI, seconds, cost, tokens, and the full recognised fields.
-  - `failed`: the error.
+  - `failed`: a recognition error.
   - `approved`: the final values, and which fields you changed from Claude's reading.
+  - `upload_started`, `uploaded` (with the Wint receipt id), `upload_duplicate`, `upload_failed`,
+    `upload_finished`.
+  - `error`: anything else that went wrong, with a traceback when there is one (background jobs
+    included); `crash`: an unhandled exception.
+
+  Example: what went wrong today? `jq -c 'select(.event|test("fail|error|crash"))' recognition.log`
 
   Example: which fields get corrected most?
   `jq -s 'map(select(.event=="approved")) | map(.changed[]) | group_by(.) | map({field: .[0], n: length})' recognition.log`
@@ -397,7 +404,7 @@ wint_receipts/core/    UI-free logic
   wint.py              Wint client (reads; writes only with allow_writes=True), request log
   upload.py            create one receipt per approved page, idempotent by ClientId
   session.py           per-PDF state next to the PDF
-  reclog.py            recognition log
+  reclog.py            event log (recognition.log)
   learnings.py         AI learnings file: parse, apply, learn
   config.py            settings + credentials (env → keyring)
   browse.py            receipts in Wint: query, paging, temp-folder cache

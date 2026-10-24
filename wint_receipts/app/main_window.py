@@ -31,6 +31,7 @@ from .browser import BrowserWindow
 from .image_view import ImagePane
 from .receipt_form import ReceiptForm, format_amount
 from .settings_dialog import SettingsDialog
+from . import workers
 from .workers import Job
 
 STATUS_COLORS = theme.STATUS
@@ -54,6 +55,9 @@ def _log_quietly(path: Path | None, entry: dict) -> None:
 
 
 class MainWindow(QMainWindow):
+    def log_event(self, event: str, **fields) -> None:
+        _log_quietly(self.settings.recognition_log_path(), {"event": event, **fields})
+
     def __init__(self, settings: Settings):
         super().__init__()
         self.settings = settings
@@ -65,6 +69,8 @@ class MainWindow(QMainWindow):
         self._upload_total = self._upload_done = 0
         self._upload_cancelled = False
         self._browser: BrowserWindow | None = None
+        workers.on_error = lambda tag, msg, tb: self.log_event("error", where="background job", job=tag,
+                                                                error=msg, traceback=tb)
         self._allow_similar: set[str] = set()  # client ids the user chose to upload despite a similar receipt
         self._reference_loading = False
         self._recognize_after_reference = False  # a PDF was opened before the categories arrived
@@ -346,6 +352,8 @@ class MainWindow(QMainWindow):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(ref.model_dump_json(indent=2), encoding="utf-8")
         self.form.set_reference(ref)
+        self.log_event("wint_data_loaded", company=ref.company_name, categories=len(ref.categories),
+                       payment_methods=len(ref.payment_methods), persons=len(ref.persons))
         self.statusBar().showMessage(
             f"{ref.company_name}: {len(ref.categories)} categories, {len(ref.payment_methods)} payment methods", 6000)
         self._fill_default_payment_method()
@@ -354,6 +362,7 @@ class MainWindow(QMainWindow):
 
     def _reference_failed(self, _tag, msg: str) -> None:
         self._reference_loading = False
+        self.log_event("wint_data_failed", error=msg)
         self.statusBar().showMessage(f"Could not load Wint data: {msg}", 10000)
         self._recognize_if_waiting()  # recognise without categories rather than not at all
 
@@ -404,9 +413,12 @@ class MainWindow(QMainWindow):
         try:
             session = open_session(path)
         except Exception as e:  # noqa: BLE001
+            self.log_event("open_failed", pdf=str(path), error=str(e), traceback=traceback.format_exc())
             QMessageBox.critical(self, "Open PDF", f"Could not open {path.name}: {e}")
             return
         self._restore_uploads(session)
+        self.log_event("pdf_opened", pdf=session.pdf_path, pdf_sha256=session.pdf_sha256,
+                       pages=len(session.pages), uploaded=sum(p.wint_receipt_id is not None for p in session.pages))
         self.session = session
         self._display_cache.clear()
         self._rendering.clear()
@@ -554,6 +566,7 @@ class MainWindow(QMainWindow):
 
     def _render_failed(self, key: tuple[int, int], msg: str) -> None:
         self._rendering.discard(key)
+        self.log_event("error", where="render page", page=key[0] + 1, error=msg)
         self.statusBar().showMessage(f"Could not render page {key[0] + 1}: {msg}", 8000)
 
     def _rotate(self, delta: int) -> None:
@@ -832,6 +845,7 @@ class MainWindow(QMainWindow):
                 name = self._category_name(d.category_id) or str(d.category_id)
                 learned.append(self.learnings.learn_category(supplier, rec.supplier_org_number, d.category_id, name))
         except OSError as e:
+            self.log_event("error", where="AI learnings file", error=str(e))
             self.statusBar().showMessage(f"Could not update the AI learnings file: {e}", 8000)
             return []
         if learned:
@@ -1046,6 +1060,8 @@ class MainWindow(QMainWindow):
             return
         self._upload_queue = [p.index for p in pages]
         self._upload_total, self._upload_done, self._upload_cancelled = len(pages), 0, False
+        self.log_event("upload_started", pdf=self.session.pdf_path, pages=[p.index + 1 for p in pages],
+                       total=summary)
         self.upload_act.setEnabled(False)
         self._upload_next()
 
@@ -1075,6 +1091,8 @@ class MainWindow(QMainWindow):
         if not self._upload_queue:
             self._show_upload_progress(None)
             self.upload_act.setEnabled(True)
+            self.log_event("upload_finished", uploaded=self._upload_done,
+                           not_sent=self._upload_total - self._upload_done, cancelled=self._upload_cancelled)
             if self._upload_cancelled:
                 left = self._upload_total - self._upload_done
                 self.statusBar().showMessage(
@@ -1119,11 +1137,13 @@ class MainWindow(QMainWindow):
                     self, "Possible duplicate",
                     f"Wint already has a receipt of {format_amount(d.amount)} {d.currency} on {d.date} ({ids}).\n\n"
                     f"Upload page {index + 1} anyway?") == QMessageBox.StandardButton.Yes:
+                self.log_event("upload_duplicate", page=index + 1, wint_ids=receipt_id[1], uploaded_anyway=True)
                 self._allow_similar.add(p.client_id)
                 p.status = PageStatus.APPROVED
                 if not self._upload_cancelled:
                     self._upload_queue.insert(0, index)
             else:
+                self.log_event("upload_duplicate", page=index + 1, wint_ids=receipt_id[1], uploaded_anyway=False)
                 p.status, p.error = PageStatus.APPROVED, f"Not uploaded: Wint already has {ids}"
                 self._upload_total -= 1
             self._after_page_change(index)
@@ -1138,10 +1158,14 @@ class MainWindow(QMainWindow):
                     supplier=p.draft.supplier_name if p.draft else "",
                     org=(p.recognition.supplier_org_number or "") if p.recognition else "")
             except OSError as e:
+                self.log_event("error", where="upload ledger", page=index + 1, wint_receipt_id=receipt_id, error=str(e))
                 QMessageBox.warning(self, "Upload", f"Uploaded, but the upload ledger couldn't be written: {e}")
             p.status = PageStatus.UPLOADED
             p.wint_receipt_id = receipt_id
             p.error = None
+            self.log_event("uploaded", pdf=self.session.pdf_path, page=index + 1, wint_receipt_id=receipt_id,
+                           client_id=p.client_id, date=p.draft.date if p.draft else None,
+                           amount=p.draft.amount if p.draft else None, currency=p.draft.currency if p.draft else None)
             self._upload_done += 1
             self._after_page_change(index)
             if p.draft:
@@ -1150,6 +1174,7 @@ class MainWindow(QMainWindow):
         self._upload_next()
 
     def _upload_failed(self, index: int, msg: str) -> None:
+        self.log_event("upload_failed", page=index + 1, error=msg)
         p = self._page(index)
         if p:
             p.status = PageStatus.APPROVED
@@ -1200,6 +1225,7 @@ class MainWindow(QMainWindow):
             try:
                 save_session(self.session)
             except OSError as e:
+                self.log_event("error", where="save session", error=str(e))
                 self.statusBar().showMessage(f"Could not save session: {e}", 10000)
 
     def _update_status(self) -> None:
@@ -1235,6 +1261,8 @@ class MainWindow(QMainWindow):
             if QMessageBox.question(self, "Quit", "Work is still running. Quit anyway?") != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
+        self.log_event("app_closed")
+        workers.on_error = None
         self.pool.clear()
         recognize.cancel_all()  # running claude processes would otherwise outlive the app
         self.pool.waitForDone(5000)

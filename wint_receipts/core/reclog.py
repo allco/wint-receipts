@@ -1,9 +1,15 @@
-"""Recognition log: one JSON line per recognition attempt and per approval.
+"""The app's event log (recognition.log): one JSON line per event, good news and errors alike.
 
 Events:
+  app_started, app_closed
+  pdf_opened, open_failed
+  wint_data_loaded, wint_data_failed
   recognized — claude returned fields (with model, timing, cost, tokens and the full recognition)
   failed     — recognition errored
   approved   — the user approved a receipt; the final values and which fields differ from claude's
+  upload_started, uploaded, upload_duplicate, upload_failed, upload_finished
+  error      — anything else that went wrong, with a traceback when there is one
+  crash      — an unhandled exception
 """
 from __future__ import annotations
 
