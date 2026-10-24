@@ -1,10 +1,13 @@
 """Pick participants from the Wint receipt address book: search, tick, most used first."""
 from __future__ import annotations
 
+from html import escape
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 from ..core.models import ME_ID, Person
+from . import theme
 
 ROLE_PERSON = Qt.ItemDataRole.UserRole
 
@@ -18,6 +21,7 @@ class PeoplePicker(QWidget):
         self._common: set[int] = set()
         self._me: Person | None = None
         self.touched = False  # the user ticked/unticked someone since the page was shown
+        self._suggested = False
         self._loading = False
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search participants…")
@@ -27,11 +31,13 @@ class PeoplePicker(QWidget):
         self.list.itemChanged.connect(self._item_changed)
         self.summary = QLabel()
         self.summary.setWordWrap(True)
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
+        self.summary.linkActivated.connect(self._remove_link)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.summary)
         lay.addWidget(self.search)
         lay.addWidget(self.list)
-        lay.addWidget(self.summary)
         self._fit_height()
 
     def set_people(self, people: list[Person], common_ids: list[int], me: Person | None = None) -> None:
@@ -46,11 +52,14 @@ class PeoplePicker(QWidget):
         if missing:
             self._people = missing + self._people
         self.touched = False
+        self._suggested = False
         self._rebuild({p.id for p in people})
 
     def set_suggested(self, suggested: bool) -> None:
-        """Show that the ticks are the app's suggestion; approving the receipt accepts them."""
-        self._update_summary(suggested)
+        """Show that the ticks are the app's suggestion; approving the receipt accepts them, and the
+        first person the user ticks replaces the suggested guest."""
+        self._suggested = suggested
+        self._update_summary()
 
     def selected(self) -> list[Person]:
         out = []
@@ -106,16 +115,47 @@ class PeoplePicker(QWidget):
             else:
                 it.setHidden(bool(needle) and needle not in f"{p.name} {p.company}".lower())
 
-    def _item_changed(self, _item) -> None:
-        if not self._loading:
-            self.touched = True
-            self._update_summary()
-            self.changed.emit()
+    def _item_changed(self, item) -> None:
+        if self._loading:
+            return
+        if self._suggested and item.checkState() is Qt.CheckState.Checked:
+            self._loading = True
+            try:
+                for i in range(self.list.count()):
+                    it = self.list.item(i)
+                    p = it.data(ROLE_PERSON)
+                    if it is not item and p is not None and p.id != ME_ID:
+                        it.setCheckState(Qt.CheckState.Unchecked)
+            finally:
+                self._loading = False
+        self._suggested = False
+        self.touched = True
+        self._update_summary()
+        self.changed.emit()
 
-    def _update_summary(self, suggested: bool = False) -> None:
-        names = [p.name for p in self.selected()]
-        text = f"{len(names)} selected: " + ", ".join(names) if names else "Nobody selected"
-        self.summary.setText(f"Suggested — check who was there. {text}" if suggested else text)
+    def _remove_link(self, link: str) -> None:
+        pid = int(link.removeprefix("remove:"))
+        for i in range(self.list.count()):
+            it = self.list.item(i)
+            p = it.data(ROLE_PERSON)
+            if p is not None and p.id == pid and it.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                it.setCheckState(Qt.CheckState.Unchecked)
+
+    def _update_summary(self) -> None:
+        chip = f"background:{theme.CHIP_BG}; color:{theme.CHIP_TEXT};"
+        parts = []
+        for p in self.selected():
+            name = escape(p.name)
+            if p.id == ME_ID:
+                parts.append(f"<span style='{chip}'>&nbsp;{name} (you)&nbsp;</span>")
+            else:
+                parts.append(f"<span style='{chip}'>&nbsp;{name} <a href='remove:{p.id}' "
+                             f"style='text-decoration:none; color:inherit'>✕</a>&nbsp;</span>")
+        text = f"<b>{len(parts)} selected:</b> " + " ".join(parts) if parts else "<b>Nobody selected</b>"
+        if self._suggested:
+            text = ("<span style='color:%s'>Suggested — check who was there; ticking someone replaces "
+                    "the suggested guest.</span><br>" % theme.WARNING_TEXT) + text
+        self.summary.setText(text)
 
     def _fit_height(self) -> None:
         self.list.setMinimumHeight(self.fontMetrics().height() * 9)

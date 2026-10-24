@@ -493,8 +493,8 @@ class MainWindow(QMainWindow):
         item.setHidden(p.deleted)
 
     def _suggest_participants(self, p: PageState) -> bool:
-        """Pre-tick guests on a representation receipt: the last ones for this supplier, else a random
-        person from the address book. They stay marked as a suggestion until the user approves."""
+        """Pre-tick one guest on a representation receipt: the last one for this supplier, else a random
+        person from the address book. It stays marked as a suggestion until the user approves."""
         d, rec, ref = p.draft, p.recognition, self.reference
         if d is None or ref is None or d.participants_reviewed or d.participants_suggested \
                 or not checks.is_representation(self._category_name(d.category_id)) \
@@ -503,7 +503,7 @@ class MainWindow(QMainWindow):
         book = {q.id: q for q in ref.persons}
         remembered = self.learnings.participants_for(d.supplier_name, rec.supplier_org_number if rec else None) \
             if self.learnings else []
-        guests = [book[pid] for pid, _ in remembered if pid in book]
+        guests = [book[pid] for pid, _ in remembered if pid in book][:1]
         if not guests:
             others = [q for q in ref.persons if q.id != ME_ID]
             guests = [random.choice(others)] if others else []
