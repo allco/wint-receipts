@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from ..core import checks, config, pdf, reclog, recognize, upload
+from ..core import browse, checks, config, pdf, reclog, recognize, upload
 from ..core.learnings import Learnings
 from ..core.ledger import Ledger
 from ..core.config import Settings
@@ -92,6 +92,7 @@ class MainWindow(QMainWindow):
         self.page_list.setObjectName("pages")
         self.page_list.setMinimumWidth(320)
         self.page_list.currentRowChanged.connect(self._show_page)
+        self.page_list.itemSelectionChanged.connect(self._update_totals)
         self.page_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.page_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.page_list.customContextMenuRequested.connect(self._show_page_menu)
@@ -135,6 +136,8 @@ class MainWindow(QMainWindow):
         self.restore_btn.clicked.connect(self._restore_all)
         self.restore_btn.hide()
         self.statusBar().addWidget(self.restore_btn)
+        self.totals_label = QLabel()
+        self.statusBar().addWidget(self.totals_label)
         self.ai_busy = QWidget()
         busy = QHBoxLayout(self.ai_busy)
         busy.setContentsMargins(0, 0, 8, 0)
@@ -1262,6 +1265,21 @@ class MainWindow(QMainWindow):
             self.ai_busy_label.setText(f"AI is reading {reading} page{'s' if reading != 1 else ''}…")
         self.ai_busy.setVisible(bool(reading))
         self.upload_act.setText(f"Upload approved ({len(self._approved())})")
+        self._update_totals()
+
+    def _update_totals(self) -> None:
+        """Number of receipts and their total per currency: of the selection when two or more pages are
+        selected, else of the whole PDF."""
+        if not self.session:
+            self.totals_label.setText("")
+            return
+        selected = sorted(self.page_list.row(it) for it in self.page_list.selectedItems() if not it.isHidden())
+        indices = selected if len(selected) > 1 else [p.index for p in self.session.pages]
+        receipts = [p for i in indices if (p := self._page(i)) is not None and not p.deleted and p.draft
+                    and p.draft.amount is not None and self._owner_of(i) is None]
+        totals = browse.format_totals(browse.sum_by_currency((p.draft.currency, p.draft.amount) for p in receipts))
+        what = f"{len(selected)} selected" if len(selected) > 1 else f"{len(receipts)} receipts"
+        self.totals_label.setText(f"{what}: {totals}" if receipts else f"{what}: no amounts yet")
 
     def closeEvent(self, event):  # noqa: N802
         self._save_timer.stop()

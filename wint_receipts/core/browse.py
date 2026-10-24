@@ -106,6 +106,23 @@ class Page(BaseModel):
     fetched_at: float
 
 
+class Summary(BaseModel):
+    count: int
+    totals: dict[str, float]
+    fetched_at: float
+
+
+def format_totals(totals: dict[str, float]) -> str:
+    return ", ".join(f"{v:,.2f} {cur}".replace(",", " ") for cur, v in sorted(totals.items(), key=lambda kv: (kv[0] != "SEK", kv[0])))
+
+
+def sum_by_currency(rows) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for currency, amount in rows:
+        out[currency or "?"] = out.get(currency or "?", 0.0) + (amount or 0.0)
+    return out
+
+
 def _key(query: Query, page: int) -> str:
     return hashlib.sha256(json.dumps(query.params(page), sort_keys=True, default=str).encode()).hexdigest()[:24]
 
@@ -130,6 +147,27 @@ def fetch_page(client: WintClient, query: Query, page: int, use_cache: bool = Tr
     return result
 
 
+def fetch_summary(client: WintClient, query: Query, use_cache: bool = True) -> Summary:
+    """How many receipts match the filters and their total per currency, as Wint counts them."""
+    path = cache_dir() / f"summary-{_key(query, -1)}.json"
+    if use_cache:
+        try:
+            cached = Summary.model_validate_json(path.read_text(encoding="utf-8"))
+            if time.time() - cached.fetched_at < LIST_TTL:
+                return cached
+        except (OSError, ValueError):
+            pass
+    data = client.receipts(**{**query.params(0, 1), "IncludeSummary": "true"}) or {}
+    item = data.get("SummaryItem") or {}
+    totals = {t.get("Type") or "?": t.get("Value") or 0.0 for t in item.get("TotalAmountSummary") or []}
+    result = Summary(count=data.get("TotalItems") or 0, totals=totals, fetched_at=time.time())
+    try:
+        path.write_text(result.model_dump_json(), encoding="utf-8")
+    except OSError:
+        pass
+    return result
+
+
 def fetch_attachment(client: WintClient, receipt_id: int, attachment_id: int) -> Path:
     """The attachment as a file in the cache; attachments never change, so it never expires."""
     for path in cache_dir().glob(f"attachment-{receipt_id}-{attachment_id}.*"):
@@ -147,5 +185,5 @@ def fetch_attachment(client: WintClient, receipt_id: int, attachment_id: int) ->
 
 
 def clear_cache() -> None:
-    for p in cache_dir().glob("list-*.json"):
+    for p in [*cache_dir().glob("list-*.json"), *cache_dir().glob("summary-*.json")]:
         p.unlink(missing_ok=True)

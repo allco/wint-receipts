@@ -41,6 +41,10 @@ class FakeClient:
         self.attachment_calls: list[str] = []
 
     def receipts(self, **params):
+        if params.get("IncludeSummary"):
+            self.summary_calls = getattr(self, "summary_calls", 0) + 1
+            return {"Items": None, "TotalItems": self.total,
+                    "SummaryItem": {"TotalAmountSummary": [{"Type": "SEK", "Value": 1234.5}, {"Type": "EUR", "Value": 10}]}}
         self.calls.append(params)
         start = params["Page"] * params["NumPerPage"]
         n = max(0, min(params["NumPerPage"], self.total - start))
@@ -172,3 +176,26 @@ def test_main_window_opens_one_browser(qtbot, monkeypatch):
     w._open_browser()
     assert w._browser is first and first.windowTitle() == "Receipts in Wint"
     first.close()
+
+
+def test_totals_for_all_or_the_selection(qtbot, window):
+    from PySide6.QtCore import QItemSelectionModel
+    qtbot.waitUntil(lambda: "250 receipts: 1 234.50 SEK, 10.00 EUR" in window.totals_label.text(), timeout=5000)
+    sm = window.table.selectionModel()
+    window.table.selectRow(0)
+    sm.select(window.proxy.index(1, 0), QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
+    assert "2 selected: 4 990.00 SEK" in window.totals_label.text()  # 2500 + 2490
+    window.table.selectRow(0)
+    assert "250 receipts" in window.totals_label.text()
+    window.search.setText("2500.00")
+    assert "1 found: 2 500.00 SEK" in window.totals_label.text()
+
+
+def test_summary_is_cached():
+    c = FakeClient()
+    first = browse.fetch_summary(c, browse.Query())
+    assert first.count == 250 and first.totals == {"SEK": 1234.5, "EUR": 10}
+    browse.fetch_summary(c, browse.Query())
+    assert c.summary_calls == 1
+    browse.fetch_summary(c, browse.Query(), use_cache=False)
+    assert c.summary_calls == 2

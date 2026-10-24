@@ -834,3 +834,19 @@ def test_event_log_records_uploads_and_background_errors(window, monkeypatch, tm
     job.run()
     last = json.loads(log.read_text().splitlines()[-1])
     assert last["event"] == "error" and last["job"] == "probe" and "ZeroDivisionError" in last["traceback"]
+
+
+def test_status_totals_for_all_or_the_selection(window):
+    from PySide6.QtCore import QItemSelectionModel
+    s = window.session
+    s.pages[1].draft.currency = "EUR"
+    window._update_status()
+    amounts = [p.draft.amount for p in s.pages if not p.deleted and p.draft and p.draft.amount is not None]
+    assert window.totals_label.text().startswith(f"{len(amounts)} receipts: ")
+    assert "EUR" in window.totals_label.text() and "SEK" in window.totals_label.text()
+    lst = window.page_list
+    lst.setCurrentRow(0)
+    lst.selectionModel().select(lst.model().index(1, 0), QItemSelectionModel.SelectionFlag.Select)
+    assert window.totals_label.text() == "2 selected: 44.85 SEK, 45.85 EUR"
+    lst.setCurrentRow(0)
+    assert "receipts:" in window.totals_label.text()

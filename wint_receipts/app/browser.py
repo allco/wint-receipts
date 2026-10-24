@@ -212,7 +212,7 @@ class BrowserWindow(QMainWindow):
         self.table = QTableView()
         self.table.setModel(self.proxy)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
         self.table.setWordWrap(False)
@@ -226,6 +226,7 @@ class BrowserWindow(QMainWindow):
         header.sectionClicked.connect(self._header_clicked)
         self._show_sort_indicator()
         self.table.selectionModel().currentRowChanged.connect(lambda cur, _prev: self._select(cur))
+        self.table.selectionModel().selectionChanged.connect(lambda *_: self._update_count())
         self.table.verticalScrollBar().valueChanged.connect(self._maybe_load_more)
         self.table_message = QLabel()
         self.table_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -290,6 +291,9 @@ class BrowserWindow(QMainWindow):
 
         self.count_label = QLabel()
         self.statusBar().addWidget(self.count_label)
+        self.totals_label = QLabel()
+        self.statusBar().addWidget(self.totals_label)
+        self.summary: browse.Summary | None = None
         self.busy = BusyIndicator()
         self.statusBar().addPermanentWidget(self.busy)
 
@@ -418,8 +422,10 @@ class BrowserWindow(QMainWindow):
         self._total = 0
         self._loading = False
         self.model.set_rows([])
+        self.summary = None
         self._select(QModelIndex())
         self._load_page(use_cache)
+        self._load_summary(use_cache)
 
     def _load_page(self, use_cache: bool = True) -> None:
         client = self._client_factory()
@@ -440,6 +446,25 @@ class BrowserWindow(QMainWindow):
                 client.close()
 
         self._run(Job(gen, work), self._page_loaded, self._page_failed)
+
+    def _load_summary(self, use_cache: bool = True) -> None:
+        client = self._client_factory()
+        if client is None:
+            return
+        query, gen = self.query, self._generation
+
+        def work():
+            try:
+                return browse.fetch_summary(client, query, use_cache=use_cache)
+            finally:
+                client.close()
+
+        self._run(Job(gen, work), self._summary_loaded, lambda *_: None)
+
+    def _summary_loaded(self, gen: int, summary: browse.Summary) -> None:
+        if gen == self._generation:
+            self.summary = summary
+            self._update_count()
 
     def _page_loaded(self, gen: int, result: browse.Page) -> None:
         if gen != self._generation:
@@ -487,6 +512,20 @@ class BrowserWindow(QMainWindow):
         if self.proxy.text:
             text = f"{shown:,} match the search · {text[0].lower()}{text[1:]}".replace(",", " ")
         self.count_label.setText(text if self._total else "")
+        selected = [self.proxy.index(i.row(), 0).data(Qt.ItemDataRole.UserRole)
+                    for i in self.table.selectionModel().selectedRows()]
+        if len(selected) > 1:
+            totals = browse.sum_by_currency((r.currency, r.amount) for r in selected)
+            self.totals_label.setText(f"   |   {len(selected)} selected: {browse.format_totals(totals)}")
+        elif self.proxy.text:
+            rows = [self.proxy.index(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(shown)]
+            totals = browse.sum_by_currency((r.currency, r.amount) for r in rows)
+            self.totals_label.setText(f"   |   {shown} found: {browse.format_totals(totals)}" if rows else "")
+        elif self.summary is not None:
+            self.totals_label.setText(f"   |   {self.summary.count:,} receipts: ".replace(",", " ")
+                                      + (browse.format_totals(self.summary.totals) or "0.00"))
+        else:
+            self.totals_label.setText("")
 
     def _update_cached_label(self) -> None:
         if self._fetched_at is None:
