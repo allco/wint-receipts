@@ -21,7 +21,10 @@ artefact=$(.venv/bin/python scripts/build.py | tail -1)
 env -u WINT_USER -u WINT_TOKEN .venv/bin/python scripts/smoke_test.py "$artefact"
 
 mkdir -p "$(dirname "$dest")"
-install -m 755 "$artefact" "$dest"
+# A new file renamed over the old one: a running copy keeps its own file (overwriting it in place
+# made the running app die with SIGBUS, silently).
+install -m 755 "$artefact" "$dest.new"
+mv -f "$dest.new" "$dest"
 cmp "$artefact" "$dest"
 env -u WINT_USER -u WINT_TOKEN .venv/bin/python scripts/smoke_test.py "$dest"
 
