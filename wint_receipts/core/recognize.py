@@ -85,6 +85,7 @@ def cancel_all() -> None:
     with _running_lock:
         procs = list(_running)
     for proc in procs:
+        proc.stopped = True  # Windows reports a killed process as exit code 1, not a negative signal
         proc.kill()
 
 
@@ -182,7 +183,7 @@ def recognize_png(
         finally:
             with _running_lock:
                 _running.discard(proc)
-    if proc.returncode < 0:
+    if proc.returncode < 0 or getattr(proc, "stopped", False):
         raise RecognitionError("reading was stopped")
     if proc.returncode != 0 and not stdout.strip():
         raise RecognitionError(f"claude exited {proc.returncode}: {stderr.strip()[:300]}")

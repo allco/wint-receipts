@@ -10,7 +10,7 @@ def test_supplier_key_ignores_case_punctuation_and_company_form():
 def test_learn_category_then_apply_by_name_or_org(tmp_path):
     lr = Learnings(tmp_path / "learnings.txt")
     lr.learn_category("EasyPark AB", "556626-7893", 86914, "Parkering")
-    text = (tmp_path / "learnings.txt").read_text()
+    text = (tmp_path / "learnings.txt").read_text(encoding="utf-8")
     assert text.startswith("# Wint receipts: AI learnings")
     assert 'category: "EasyPark AB" (org 556626-7893) = "Parkering" [86914]' in text
     by_name = lr.apply("EASYPARK", None, 7)
@@ -33,7 +33,7 @@ def test_supplier_alias_and_user_lines_survive(tmp_path):
     path.write_text("# my notes\nReceipts from Mr Wok are Representation.\n")
     lr = Learnings(path)
     lr.learn_supplier("EASYPARK", "EasyPark AB")
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "# my notes" in text and "Receipts from Mr Wok are Representation." in text
     assert lr.apply("easypark", None, None).supplier_name == "EasyPark AB"
     assert lr.hints() == ["Receipts from Mr Wok are Representation."]

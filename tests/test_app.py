@@ -65,7 +65,7 @@ def test_approve_edit_and_persist(window, qtbot, sample_pdf):
     assert p0.status is PageStatus.APPROVED and p0.draft.currency == "EUR"
     assert window._current_index() == 1  # moved on to the next page needing review
     window._save_now()
-    saved = json.loads(session_path(sample_pdf.resolve()).read_text())
+    saved = json.loads(session_path(sample_pdf.resolve()).read_text(encoding="utf-8"))
     assert saved["pages"][0]["status"] == "approved"
 
 
@@ -123,7 +123,7 @@ def test_first_payment_method_preselected_when_several(qtbot, monkeypatch):
 
 
 def test_recognition_log(window, tmp_path):
-    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
+    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text(encoding="utf-8").splitlines()]
     assert [e["event"] for e in lines] == ["wint_data_loaded", "pdf_opened", "reading_started"] + ["recognized"] * 3
     assert lines[1]["pages"] == 3 and lines[0]["company"] == "Test AB" and lines[2]["pages"] == [1, 2, 3]
     lines = lines[3:]
@@ -132,7 +132,7 @@ def test_recognition_log(window, tmp_path):
     window.form.currency.setText("EUR")
     window.form.currency.textEdited.emit("EUR")
     window._approve()
-    approved = json.loads((tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()[-1])
+    approved = json.loads((tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text(encoding="utf-8").splitlines()[-1])
     assert approved["event"] == "approved" and approved["changed"] == ["currency"]
     assert approved["final"]["currency"] == "EUR" and approved["uncertain"] == ["total"]
 
@@ -150,7 +150,7 @@ def test_recognition_failure_logged(qtbot, monkeypatch, sample_pdf, tmp_path):
     qtbot.addWidget(w)
     w.open_pdf(sample_pdf)
     qtbot.waitUntil(lambda: all(p.status is PageStatus.FAILED for p in w.session.pages), timeout=10000)
-    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text().splitlines()]
+    lines = [json.loads(x) for x in (tmp_path / "cache" / "wint-receipts" / "recognition.log").read_text(encoding="utf-8").splitlines()]
     failed = [e for e in lines if e["event"] == "failed"]
     assert {e["event"] for e in lines} <= {"pdf_opened", "reading_started", "failed", "error"} and len(failed) == 3
     assert "timed out" in failed[0]["error"]
@@ -408,7 +408,7 @@ def test_category_correction_is_learned_and_reused(qtbot, monkeypatch, sample_pd
     w.page_list.setCurrentRow(0)
     w.form.category.setCurrentIndex(w.form.category.findData(8))   # the user corrects the category
     w._approve()
-    text = (tmp_path / "learnings.txt").read_text()
+    text = (tmp_path / "learnings.txt").read_text(encoding="utf-8")
     assert 'category: "MR WOK" = "Förbrukning" [8]' in text
     w._recognize([1], force=True)  # read another receipt from the same place
     qtbot.waitUntil(lambda: w.session.pages[1].status is not PageStatus.RECOGNIZING, timeout=10000)
@@ -659,7 +659,7 @@ def test_participants_suggested_until_confirmed_and_remembered(qtbot, monkeypatc
     assert [x.name for x in p.draft.persons] == ["Ada Lovelace", "Anna"]
     w._approve()
     assert p.status is PageStatus.APPROVED
-    assert 'participants: "Mr Wok" = "Anna" [1]' in (tmp_path / "learnings.txt").read_text()
+    assert 'participants: "Mr Wok" = "Anna" [1]' in (tmp_path / "learnings.txt").read_text(encoding="utf-8")
     # the next Mr Wok receipt suggests Anna; approving accepts it as is
     p2 = w.session.pages[1]
     p2.draft.persons, p2.draft.participants_suggested, p2.draft.participants_reviewed = [], False, False
@@ -831,7 +831,7 @@ def test_event_log_records_uploads_and_background_errors(window, monkeypatch, tm
     ok(tag, 5001)
     tag, ok, fail = started[-1]
     fail(tag, "HTTP 500")
-    events = [json.loads(x) for x in log.read_text().splitlines()]
+    events = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
     names = [e["event"] for e in events]
     assert names[-3:] == ["upload_started", "uploaded", "upload_failed"]
     assert events[-2]["wint_receipt_id"] == 5001 and events[-1]["error"] == "HTTP 500"
@@ -839,7 +839,7 @@ def test_event_log_records_uploads_and_background_errors(window, monkeypatch, tm
     from wint_receipts.app import workers
     job = workers.Job("probe", lambda: 1 / 0)
     job.run()
-    last = json.loads(log.read_text().splitlines()[-1])
+    last = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert last["event"] == "error" and last["job"] == "probe" and "ZeroDivisionError" in last["traceback"]
 
 

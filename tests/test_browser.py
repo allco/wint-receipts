@@ -1,4 +1,5 @@
 import base64
+import sys
 import tempfile
 from datetime import date
 
@@ -95,7 +96,8 @@ def test_attachments_cached_as_files():
     path = browse.fetch_attachment(c, 1, 2)
     assert path.suffix == ".pdf" and path.read_bytes().startswith(b"%PDF")
     assert browse.fetch_attachment(c, 1, 2) == path and len(c.attachment_calls) == 1
-    assert (browse.cache_dir().stat().st_mode & 0o777) == 0o700
+    if sys.platform != "win32":  # Windows has no Unix permission bits
+        assert (browse.cache_dir().stat().st_mode & 0o777) == 0o700
 
 
 @pytest.fixture

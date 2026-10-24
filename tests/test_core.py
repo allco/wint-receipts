@@ -186,7 +186,7 @@ def make_client(handler, tmp_path, allow_writes=False):
 
 
 def log_lines(log):
-    return [json.loads(x) for x in log.read_text().splitlines()]
+    return [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
 
 
 def test_get_is_logged_without_credentials(tmp_path):
@@ -199,7 +199,7 @@ def test_get_is_logged_without_credentials(tmp_path):
     assert client.company()["Id"] == 10001
     (entry,) = log_lines(log)
     assert entry["method"] == "GET" and entry["status"] == 200 and entry["rate_limit_remaining"] == 998
-    assert "secret-token" not in log.read_text()
+    assert "secret-token" not in log.read_text(encoding="utf-8")
 
 
 def test_writes_refused_by_default_and_logged(tmp_path):
