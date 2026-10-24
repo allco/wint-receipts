@@ -575,6 +575,7 @@ class MainWindow(QMainWindow):
         if p is None or p.wint_receipt_id is not None or p.status is PageStatus.UPLOADING:
             return
         p.rotation = (p.rotation + delta) % 360
+        self.log_event("page_rotated", page=p.index + 1, rotation=p.rotation)
         self._show_image(p)
         self._schedule_save()
         hint = " — use “Read again with AI” if it was read sideways" if p.recognition else ""
@@ -664,6 +665,8 @@ class MainWindow(QMainWindow):
         if indices is None:
             indices = [p.index for p in self.session.pages if p.status in (PageStatus.NEW, PageStatus.FAILED)
                        and p.wint_receipt_id is None and not p.deleted]
+        if indices:
+            self.log_event("reading_started", pages=[i + 1 for i in indices], again=force, model=self.settings.claude_model)
         categories = list(self.reference.categories) if self.reference else []
         learnings_text = self.learnings.prompt_section() if self.learnings else ""
         pdf_path = Path(self.session.pdf_path)
@@ -928,6 +931,7 @@ class MainWindow(QMainWindow):
             return
         for i in targets:
             self._delete_one(i)
+        self.log_event("pages_deleted", pages=[i + 1 for i in targets])
         if self._current_index() in targets or self._current_index() < 0:
             self._step_away_from(self._current_index() if self._current_index() >= 0 else targets[0])
         for q in self.session.pages:
@@ -968,6 +972,8 @@ class MainWindow(QMainWindow):
         return False
 
     def _restore(self, indices: list[int]) -> None:
+        if indices:
+            self.log_event("pages_restored", pages=[i + 1 for i in indices])
         for i in indices:
             p = self._page(i)
             if p is not None and p.deleted:
@@ -1193,6 +1199,7 @@ class MainWindow(QMainWindow):
             self._browser.activateWindow()
             return
         self._browser = BrowserWindow(self._client, self.reference, self)
+        self.log_event("browser_opened")
         self._browser.show()
 
     def _open_address_book(self) -> None:
@@ -1210,6 +1217,8 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self.settings = dlg.apply()
+        self.log_event("settings_saved", model=self.settings.claude_model, uploads_enabled=self.settings.uploads_enabled,
+                       attachment_format=self.settings.attachment_format, font_scale=self.settings.font_scale)
         self.learnings = self._load_learnings()
         self.pool.setMaxThreadCount(self.settings.parallel_recognitions)
         self._update_status()
