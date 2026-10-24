@@ -92,6 +92,8 @@ claude -p "<prompt>" --output-format json --json-schema <schema> --model sonnet 
      them that fit. Deleting doesn't change the PDF file; Ctrl+Z or *Restore deleted pages* brings it
      back.
    - Uploaded pages get their own mark: a slate dot with a ✓, and their Wint receipt number.
+   - The status bar shows how many receipts there are and their total per currency; with two or
+     more pages selected, the count and total of the selection.
 3. **Upload.** Each approved receipt is created in Wint with only its own page(s) attached, as a
    JPEG per page (or a PDF, in Settings). Before creating anything, the app checks Wint for the same
    `ClientId` and for a receipt with the same date and amount, and asks if it finds one. The status
@@ -113,6 +115,9 @@ anything, so a retried upload doesn't create duplicates.
 - **Sorting:** click a column header. Wint sorts by number, date, amount, category and state; the
   other columns can't be sorted.
 - **Paging:** 100 receipts at a time; scrolling to the bottom loads the next 100.
+- **Totals** in the status bar: how many receipts match the filters and their total per currency,
+  counted by Wint over all of them, not only the loaded ones. With two or more rows selected
+  (Ctrl/Shift+click), the selection's count and total; while searching, the matches'.
 - **Preview:** the selected receipt's details and its attachment, every page of it.
 - **Cache:** lists are cached for 10 minutes and attachments for good, in the temp folder
   (`/tmp/wint-receipts-<uid>` on Linux). **Refresh** (F5) skips the cache.
@@ -315,6 +320,7 @@ Platform notes:
 - **Request log** (on by default): every Wint request is appended as a JSON line to `wint-requests.log`.
 - **Event log** (on by default): `recognition.log`, one JSON event per line, good news and errors alike:
   - `app_started` / `app_closed`, `pdf_opened` / `open_failed`, `wint_data_loaded` / `wint_data_failed`.
+  - `reading_started`, `page_rotated`, `pages_deleted`, `pages_restored`, `settings_saved`, `browser_opened`.
   - `recognized`: page, model, DPI, seconds, cost, tokens, and the full recognised fields.
   - `failed`: a recognition error.
   - `approved`: the final values, and which fields you changed from Claude's reading.
